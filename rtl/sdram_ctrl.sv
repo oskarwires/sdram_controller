@@ -17,7 +17,7 @@ module sdram_ctrl #(
   output logic [DataWidth-1:0] o_rd_data,
   /* ----- SDRAM signals ----- */
   output logic [AddrWidth-1:0] o_dram_addr,  /* Read/Write Address */
-  inout  logic [DataWidth-1:0] o_dram_data,  /* Read/Write Data */
+  inout  tri   [DataWidth-1:0] o_dram_data,  /* Read/Write Data */
   output logic                 o_dram_ba_0,  /* Bank Address [0] */
   output logic                 o_dram_ba_1,  /* Bank Address [1] */
   output logic                 o_dram_ldqm,  /* Low byte data mask */
