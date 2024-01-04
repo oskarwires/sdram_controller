@@ -30,6 +30,16 @@ module sdram_ctrl #(
   output logic                 o_dram_cke    /* Clock Enable */
 );
 
-  // Lots of code will go here :)!
+  /* dram_cmd_t = {CS, RAS, CAS, WE} */
+  typedef enum logic [3:0] {
+    CMD_NOP      = 4'b0111,
+    CMD_RD_RDA   = 4'b0101,
+    CMD_WR_WRA   = 4'b0100,
+    CMD_ACT      = 4'b0011,
+    CMD_PRE_PALL = 4'b0010,
+    CMD_MRS      = 4'b0000,
+  } dram_cmd_t;
+  
+  
 
 endmodule
