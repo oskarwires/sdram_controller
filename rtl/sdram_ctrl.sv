@@ -1,11 +1,15 @@
 module sdram_ctrl #(
-    parameter AddrWidth  = 13,
-    parameter DataWidth  = 16,
-    parameter CasLatency = 3
+  parameter  AddrWidth     = 13,
+  parameter  DataWidth     = 16,
+  parameter  CasLatency    = 3,
+  parameter  ClockFreq     = 133_000_000, /* MHz of DRAM Clk */
+  parameter  WaitTime      = 200,         /* Microseconds */
+  localparam CyclesPerWait = ClockFreq / (1_000_000 / WaitTime)
 )(
   /* System Signals */
-  input  logic                 i_clk,
-  input  logic                 i_rst_n,
+  input  logic                 i_sys_clk,    /* System Clock Frequency */
+  input  logic                 i_dram_clk,   /* PLL Generated DRAM Clock */
+  input  logic                 i_rst_n,      /* Sync Active Low Reset */
   /* ----- User signals ----- */
   /* Write Port */
   input  logic                 i_wr_req,
@@ -30,6 +34,8 @@ module sdram_ctrl #(
   output logic                 o_dram_cke    /* Clock Enable */
 );
 
+  assign o_dram_cke = 1'b1;
+
   /* dram_cmd_t = {CS, RAS, CAS, WE} */
   typedef enum logic [3:0] {
     CMD_NOP      = 4'b0111,
@@ -40,6 +46,18 @@ module sdram_ctrl #(
     CMD_MRS      = 4'b0000,
   } dram_cmd_t;
   
+  typedef enum logic [3:0] {
+    INIT_WAIT,
+    INIT_PALL,
+    INIT_WAIT_TRP,
+    INIT_REF,
+    INIT_WAIT_TARFC,
+    INIT_MRS,
+    INIT_WAIT_TMRD,
+    CMD_NOP,
+    // ...
+  } dram_states_t;
+
   
 
 endmodule
