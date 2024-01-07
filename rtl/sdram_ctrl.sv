@@ -5,7 +5,7 @@ module sdram_ctrl #(
   parameter  BankWidth      = 2,
   parameter  DataWidth      = 16,
   parameter  CasLatency     = 3,
-  parameter  ClockFreq      = 100_000_000,  /* MHz of DRAM Clk */
+  parameter  ClockFreq      = 133_000_000,  /* MHz of DRAM Clk */
   parameter  WaitTime       = 200,          /* Microseconds */
   parameter  TrpTime        = 20,           /* Nanoseconds */
   parameter  TrcdTime       = 20,           /* Nanoseconds */

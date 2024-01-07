@@ -5,7 +5,8 @@ module sdram_ctrl_tb();
   localparam BankWidth   = 2;
   localparam AddrWidth   = BankWidth + ColWidth + RowWidth;
   localparam DataWidth   = 16;
-  localparam ClockPeriod = 10; // in nanoseconds
+  localparam ClockFreq   = 133_000_000;
+  localparam ClockPeriod = 1_000_000_000 / ClockFreq;
 
   logic i_sys_clk, i_dram_clk;
   logic i_rst_n;
@@ -13,7 +14,9 @@ module sdram_ctrl_tb();
   logic [AddrWidth-1:0] i_wr_addr, i_rd_addr;
   logic [DataWidth-1:0] i_wr_data, o_rd_data;
 
-  sdram_ctrl uut (
+  sdram_ctrl #(
+    .ClockFreq(ClockFreq)
+  ) uut (
     .i_sys_clk,   
     .i_dram_clk,  
     .i_rst_n,     
