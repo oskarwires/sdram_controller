@@ -1,6 +1,9 @@
 `timescale 1ns / 1ps
 module sdram_ctrl_tb();
-  localparam AddrWidth   = 13;
+  localparam RowWidth    = 12;
+  localparam ColWidth    = 8;
+  localparam BankWidth   = 2;
+  localparam AddrWidth   = BankWidth + ColWidth + RowWidth;
   localparam DataWidth   = 16;
   localparam ClockPeriod = 10; // in nanoseconds
 
@@ -44,10 +47,24 @@ module sdram_ctrl_tb();
     $dumpvars(0, sdram_ctrl_tb);    // Dump all variables in this module
     
     // Initial Signal Stimuli
-    i_rst_n  <= '0; // Assert reset
+    i_rst_n   <= '0; // Assert reset
+    i_wr_req  <= '0;
+    i_wr_data <= '0;
+    i_wr_addr <= '0;
     repeat (2) @(posedge i_dram_clk);
-    i_rst_n  <= '1;
-    #(201000);
+    i_rst_n   <= '1;
+
+    #(201000); // Wait for init to finish
+
+    @(posedge i_dram_clk); // Sync back to clock
+    i_wr_req  <= '1;
+    i_wr_data <= $random;
+    i_wr_addr <= {12'd13, 8'd5, 2'd0};
+    @(posedge i_dram_clk);
+    i_wr_req <= '0; // Deassert request
+    @(posedge i_dram_clk);
+
+    #(5000);
 
     $display("sdram_ctrl testbench complete");
     $finish;
