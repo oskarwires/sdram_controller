@@ -87,7 +87,39 @@ module fifo_tb ();
       assert(o_rd_data == test_inputs[i]) else $error("Outputted data %h does not equal input value %h", o_rd_data, test_inputs[i]);
     end
     i_rd_en <= 0;
+
+    // Test 2: Simultaneous read and write
+    // Randomize the input vector
+    for (int i = 0; i < 8; i++) begin
+      test_inputs[i] <= $random; // Masking to get the lower 8 bits
+    end
+    @(posedge i_rd_clk);
     
+    fork
+       // Write to FIFO
+       begin
+        @(posedge i_wr_clk);
+        for (int i = 0; i < Depth; i++) begin
+          i_wr_data <= test_inputs[i]; // Assign data
+          i_wr_en <= 1; // We want to write data!
+          @(posedge i_wr_clk); // Wait for next rising edge
+        end
+        i_wr_data <= $random; // Assign random value to in_data, which should NOT     be written
+        i_wr_en <= 0;
+       end
+
+       begin
+        wait(!o_empty);
+        // Read from FIFO
+        for (int i = 0; i < Depth; i++) begin
+          i_rd_en <= 1;
+          @(posedge i_rd_clk); 
+          assert(o_rd_data == test_inputs[i]) else $error("Outputted data %h does     not equal input value %h", o_rd_data, test_inputs[i]);
+        end
+        i_rd_en <= 0;
+       end
+    join
+  
     // Additional test cases...
     #100;
     $display("FIFO Test Complete");
