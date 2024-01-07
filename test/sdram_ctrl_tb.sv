@@ -51,6 +51,8 @@ module sdram_ctrl_tb();
     i_wr_req  <= '0;
     i_wr_data <= '0;
     i_wr_addr <= '0;
+    i_rd_req  <= '0;
+    i_rd_addr <= '0;
     repeat (2) @(posedge i_dram_clk);
     i_rst_n   <= '1;
 
@@ -64,7 +66,15 @@ module sdram_ctrl_tb();
     i_wr_req <= '0; // Deassert request
     @(posedge i_dram_clk);
 
-    #(5000);
+    repeat (50) @(posedge i_dram_clk);
+    
+    i_rd_req  <= '1;
+    i_rd_addr <= {12'd13, 8'd5, 2'd0};
+    @(posedge i_dram_clk);
+    i_rd_req <= '0; // Deassert request
+    @(posedge i_dram_clk);
+
+    repeat(4000) @(posedge i_dram_clk);
 
     $display("sdram_ctrl testbench complete");
     $finish;

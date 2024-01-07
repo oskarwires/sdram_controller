@@ -31,6 +31,7 @@ module sdram_ctrl #(
   input  logic                 i_rd_req,
   input  logic [AddrWidth-1:0] i_rd_addr,
   output logic [DataWidth-1:0] o_rd_data,
+  output logic                 o_rd_rdy,
   /* ----- SDRAM signals ----- */
   output logic [AddrWidth-1:0] o_dram_addr,  /* Read/Write Address */
   inout  tri   [DataWidth-1:0] o_dram_data,  /* Read/Write Data */
@@ -46,7 +47,7 @@ module sdram_ctrl #(
   output logic                 o_dram_cke    /* Clock Enable */
 );
  
-  logic refresh_en, refresh_req;
+  logic refresh_en, refresh_req, refresh_ack;
 
   sdram_refresh #(
     .ClockFreq(ClockFreq)
@@ -54,6 +55,7 @@ module sdram_ctrl #(
     .i_dram_clk,
     .i_rst_n,
     .i_refresh_en(refresh_en),
+    .i_refresh_ack(refresh_ack),
     .o_refresh_req(refresh_req)
   );
 
@@ -84,7 +86,11 @@ module sdram_ctrl #(
     EXEC_WRITE_ACT,
     EXEC_WRITE_WAIT_TRCD,
     EXEC_WRITE_WRITE,
-    EXEC_READ_ACT
+    EXEC_READ_ACT,
+    EXEC_READ_WAIT_TRCD,
+    EXEC_READ_READ,
+    EXEC_READ_WAIT_CAS,
+    EXEC_READ_SAMPLE
     // ...
   } dram_states_t;
 
@@ -110,9 +116,11 @@ module sdram_ctrl #(
   // Next State Logic Controller
   always_comb begin
     unique case (curr_state)
+
       INIT_RESET: begin
         next_state = INIT_WAIT;
       end
+
       INIT_WAIT: begin
         if (counter == CyclesPerWait - 1) begin
           next_state = INIT_PALL;
@@ -120,9 +128,11 @@ module sdram_ctrl #(
           next_state = INIT_WAIT;
         end
       end
+
       INIT_PALL: begin
         next_state = INIT_WAIT_TRP;
       end
+
       INIT_WAIT_TRP: begin
         if (counter == CyclesPerTrp - 1) begin
           next_state = INIT_REF_1;
@@ -130,9 +140,11 @@ module sdram_ctrl #(
           next_state = INIT_WAIT_TRP;
         end
       end
+
       INIT_REF_1: begin
         next_state = INIT_WAIT_TARFC_1;
       end
+
       INIT_WAIT_TARFC_1: begin
         if (counter == CyclesPerTarfc - 1) begin
           next_state = INIT_REF_2;
@@ -140,9 +152,11 @@ module sdram_ctrl #(
           next_state = INIT_WAIT_TARFC_1;
         end
       end
+
       INIT_REF_2: begin
         next_state = INIT_WAIT_TARFC_2;
       end
+
       INIT_WAIT_TARFC_2: begin
         if (counter == CyclesPerTarfc - 1) begin
           next_state = INIT_MRS;
@@ -150,9 +164,11 @@ module sdram_ctrl #(
           next_state = INIT_WAIT_TARFC_2;
         end
       end
+
       INIT_MRS: begin
         next_state = INIT_WAIT_TMRD;
       end
+
       INIT_WAIT_TMRD: begin
         if (counter == CyclesPerTmrd - 1) begin
           next_state = RDY_NOP;
@@ -160,6 +176,7 @@ module sdram_ctrl #(
           next_state = INIT_WAIT_TMRD;
         end
       end
+
       RDY_NOP: begin
         if (refresh_req) begin
           next_state = EXEC_REF;
@@ -171,12 +188,15 @@ module sdram_ctrl #(
           next_state = RDY_NOP;
         end
       end
+
       EXEC_REF: begin
         next_state = RDY_NOP;
       end
+
       EXEC_WRITE_ACT: begin
         next_state = EXEC_WRITE_WAIT_TRCD;
       end
+
       EXEC_WRITE_WAIT_TRCD: begin
         if (counter == CyclesPerTrcd - 1) begin
           next_state = EXEC_WRITE_WRITE;
@@ -184,14 +204,46 @@ module sdram_ctrl #(
           next_state = EXEC_WRITE_WAIT_TRCD;
         end
       end
+      
       EXEC_WRITE_WRITE: begin
         next_state = RDY_NOP;
       end
+
+      EXEC_READ_ACT: begin
+        next_state = EXEC_READ_WAIT_TRCD;
+      end
+
+      EXEC_READ_WAIT_TRCD: begin
+        if (counter == CyclesPerTrcd - 1) begin
+          next_state = EXEC_READ_READ;
+        end else begin
+          next_state = EXEC_READ_WAIT_TRCD;
+        end
+      end
+
+      EXEC_READ_READ: begin
+        next_state = EXEC_READ_WAIT_CAS;
+      end
+
+      EXEC_READ_WAIT_CAS: begin
+        if (counter == CasLatency - 1) begin
+          next_state = EXEC_READ_SAMPLE;
+        end else begin
+          next_state = EXEC_READ_WAIT_CAS;
+        end
+      end
+
+      EXEC_READ_SAMPLE: begin
+        next_state = RDY_NOP;
+      end
+
     endcase
   end
 
   // FSM Output Controller
   always_comb begin
+    o_rd_rdy = '0;
+    refresh_ack = '0;
     unique case (curr_state)
 
       INIT_RESET: begin
@@ -306,6 +358,7 @@ module sdram_ctrl #(
       end
 
       EXEC_REF: begin
+        refresh_ack = 1'b1;
         counter_rst_n = 1'b0;
         cmd = CMD_REF;
         o_dram_addr = '0;
@@ -318,7 +371,7 @@ module sdram_ctrl #(
       EXEC_WRITE_ACT: begin
         counter_rst_n = 1'b0;
         cmd = CMD_ACT;
-        o_dram_addr = i_wr_addr; /* {A[0:11] = Rows} */
+        o_dram_addr = i_wr_addr[BankWidth+ColWidth+RowWidth-1:BankWidth+ColWidth]; /* {A[0:11] = Rows} */
         write_enable = 1'b0;
         refresh_en = 1'b1;
         {o_dram_ba_0, o_dram_ba_1} = i_wr_addr[BankWidth-1:0];
@@ -328,7 +381,7 @@ module sdram_ctrl #(
       EXEC_WRITE_WAIT_TRCD: begin
         counter_rst_n = 1'b1;
         cmd = CMD_NOP;
-        o_dram_addr = i_wr_addr[BankWidth+ColWidth+RowWidth-1:BankWidth+ColWidth];
+        o_dram_addr = '0;
         write_enable = 1'b0;
         refresh_en = 1'b1;
         {o_dram_ba_0, o_dram_ba_1} = i_wr_addr[BankWidth-1:0];
@@ -345,6 +398,57 @@ module sdram_ctrl #(
         {o_dram_ldqm, o_dram_udqm} = 2'b00; /* Low so we can control the data buffer, DQM Write Latency is 0 cycles */
       end
 
+      EXEC_READ_ACT: begin
+        counter_rst_n = 1'b0;
+        cmd = CMD_ACT;
+        o_dram_addr = i_wr_addr; /* {A[0:11] = Rows} */
+        write_enable = 1'b0;
+        refresh_en = 1'b1;
+        {o_dram_ba_0, o_dram_ba_1} = i_wr_addr[BankWidth-1:0];
+        {o_dram_ldqm, o_dram_udqm} = 2'b11; /* High so we *don't* control the data buffer, DQM Read Latency is 2 cycles */
+      end
+
+      EXEC_READ_WAIT_TRCD: begin
+        counter_rst_n = 1'b1;
+        cmd = CMD_NOP;
+        o_dram_addr = i_wr_addr[BankWidth+ColWidth+RowWidth-1:BankWidth+ColWidth];
+        write_enable = 1'b0;
+        refresh_en = 1'b1;
+        {o_dram_ba_0, o_dram_ba_1} = i_wr_addr[BankWidth-1:0];
+        {o_dram_ldqm, o_dram_udqm} = 2'b11; /* High so we *don't* control the data buffer, DQM Read Latency is 2 cycles */
+      end
+
+      EXEC_READ_READ: begin
+        counter_rst_n = 1'b0;
+        cmd = CMD_RD_RDA;
+        o_dram_addr = {1'b0, 1'b1, 1'b1, 0'b0, i_wr_addr[BankWidth+ColWidth-1:BankWidth]}; /* {A[11] = ?, A[10] = Auto Precharge, A[9] = Single Write, A[8] = ?,  A[0:7] = Cols} */
+        write_enable = 1'b0;
+        refresh_en = 1'b1;
+        {o_dram_ba_0, o_dram_ba_1} = i_wr_addr[BankWidth-1:0];
+        {o_dram_ldqm, o_dram_udqm} = 2'b11; /* High so we *don't* control the data buffer, DQM Read Latency is 2 cycles */
+      end
+
+      EXEC_READ_WAIT_CAS: begin
+        counter_rst_n = 1'b1;
+        cmd = CMD_NOP;
+        o_dram_addr = '0; /* {A[11] = ?, A[10] = Auto Precharge, A[9] = Single Write, A[8] = ?,  A[0:7] = Cols} */
+        write_enable = 1'b0;
+        refresh_en = 1'b1;
+        {o_dram_ba_0, o_dram_ba_1} = i_wr_addr[BankWidth-1:0];
+        {o_dram_ldqm, o_dram_udqm} = 2'b11; /* High so we *don't* control the data buffer, DQM Read Latency is 2 cycles */
+      end
+
+      EXEC_READ_SAMPLE: begin
+        o_rd_rdy = 1'b1;
+        counter_rst_n = 1'b0;
+        cmd = CMD_NOP;
+        o_dram_addr = '0; /* {A[11] = ?, A[10] = Auto Precharge, A[9] = Single Write, A[8] = ?,  A[0:7] = Cols} */
+        write_enable = 1'b0;
+        refresh_en = 1'b1;
+        {o_dram_ba_0, o_dram_ba_1} = '0;
+        {o_dram_ldqm, o_dram_udqm} = 2'b11; /* High so we *don't* control the data buffer, DQM Read Latency is 2 cycles */
+      end
+
     endcase
   end
 
@@ -355,7 +459,9 @@ module sdram_ctrl #(
         dram_data_out = {DataWidth{1'bz}};  // High-impedance state during read
     end
   end
+
   assign o_dram_data = dram_data_out;
+  assign o_rd_data = o_dram_data;
 
   /* Incrementing Counter */
   always_ff @(posedge i_dram_clk)
