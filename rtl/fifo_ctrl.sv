@@ -2,11 +2,9 @@
 `timescale 1ns / 1ps
 module fifo_ctrl #(
   parameter  DataWidth   = 8,
-  parameter  Depth       = 8,
-  localparam PtrWidth    = $clog2(Depth)
+  parameter  Depth       = 8
 )(
-  input  logic                i_rd_clk,
-  input  logic                i_wr_clk,
+  input  logic                i_clk,
   input  logic                i_rst_n,
   input  logic                i_wr_en,
   input  logic                i_rd_en,
@@ -16,23 +14,19 @@ module fifo_ctrl #(
   output logic                o_empty
 );
 
+  localparam PtrWidth = $clog2(Depth);
+
   logic [DataWidth-1:0] buffer[Depth];
   logic [PtrWidth:0]    wr_ptr, wr_ptr_next;
   logic [PtrWidth:0]    rd_ptr, rd_ptr_next;                 
 
-  always_ff @(posedge i_rd_clk) begin
-    if (!i_rst_n) begin
-      rd_ptr <= '0;
-    end else begin
-      rd_ptr <= rd_ptr_next;
-    end
-  end
-
-  always_ff @(posedge i_wr_clk) begin
+  always_ff @(posedge i_clk) begin
     if (!i_rst_n) begin
       wr_ptr <= '0;
+      rd_ptr <= '0;
     end else begin
       wr_ptr <= wr_ptr_next;
+      rd_ptr <= rd_ptr_next;
     end
   end
 

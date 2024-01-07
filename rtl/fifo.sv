@@ -3,10 +3,9 @@
 module fifo #(
   parameter  DataWidth = 8,
   parameter  Depth     = 8,
-  localparam PtrWidth  = $clog2(Depth)
+  parameter  FWFT      = 1 // First-Word Fall-Through
 )(
-  input  logic                 i_rd_clk,
-  input  logic                 i_wr_clk,
+  input  logic                 i_clk,
   input  logic                 i_rst_n,
   input  logic [DataWidth-1:0] i_wr_data,
   input  logic                 i_wr_en,
@@ -16,17 +15,24 @@ module fifo #(
   output logic                 o_empty
 );
 
+  localparam PtrWidth  = $clog2(Depth);
+
   logic [DataWidth-1:0] mem_rd_data;
   logic [PtrWidth-1:0]  wr_addr, rd_addr;
-
-  assign o_rd_data = mem_rd_data;
+  
+  generate 
+    if (FWFT)
+      assign o_rd_data = mem_rd_data;
+    else
+      //assign o_rd_data = mem_rd_data;
+      assign o_rd_data = i_rd_en ? mem_rd_data : '0;
+  endgenerate
 
   fifo_mem #(
     .DataWidth(DataWidth),
     .Depth(Depth)
   ) fifo_mem (
-    .i_rd_clk,
-    .i_wr_clk,
+    .i_clk,
     .i_wr_data,
     .i_wr_addr(wr_addr),
     .i_wr_en,
@@ -38,8 +44,7 @@ module fifo #(
     .DataWidth(DataWidth),
     .Depth(Depth)
   ) fifo_ctrl (
-    .i_rd_clk,
-    .i_wr_clk,
+    .i_clk,
     .i_rst_n,
     .i_wr_en,
     .i_rd_en,
