@@ -106,6 +106,7 @@ module sdram_ctrl #(
 
   assign o_dram_cke      = 1'b1;
   assign {o_dram_cs_n, o_dram_ras_n, o_dram_cas_n, o_dram_we_n} = cmd;
+  assign o_dram_clk = i_dram_clk;
 
   // State controller
   always_ff @(posedge i_dram_clk, negedge i_rst_n) begin

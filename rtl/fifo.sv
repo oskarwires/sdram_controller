@@ -3,7 +3,8 @@
 module fifo #(
   parameter  DataWidth = 8,
   parameter  Depth     = 8,
-  parameter  FWFT      = 1 // First-Word Fall-Through
+  parameter  FWFT      = 1, // First-Word Fall-Through
+  localparam PtrWidth  = $clog2(Depth)
 )(
   input  logic                 i_clk,
   input  logic                 i_rst_n,
@@ -14,8 +15,6 @@ module fifo #(
   output logic                 o_full,
   output logic                 o_empty
 );
-
-  localparam PtrWidth  = $clog2(Depth);
 
   logic [DataWidth-1:0] mem_rd_data;
   logic [PtrWidth-1:0]  wr_addr, rd_addr;
