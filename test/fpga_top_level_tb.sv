@@ -12,6 +12,11 @@ module fpga_top_level_tb();
   logic [7:0] transmit_uart_packet;
   logic [7:0] recieve_uart_packet;
 
+  tri [15:0] io_dram_data;
+  logic [15:0] i_dram_data, o_dram_data;
+
+  logic write_enable;
+
   initial i_sys_clk = 1'b0;
   always #(ClockPeriod / 2) i_sys_clk = ~i_sys_clk;
 
@@ -22,7 +27,7 @@ module fpga_top_level_tb();
     .o_sdram_clk(),  
     .i_rst_n,     
     .o_dram_addr(), 
-    .o_dram_data(), 
+    .io_dram_data, 
     .o_dram_ba_0(), 
     .o_dram_ba_1(), 
     .o_dram_ldqm(), 
@@ -73,21 +78,54 @@ module fpga_top_level_tb();
     assert(o_tx == 1'b1) else $error("No Stop bit detected"); // Stop bit requirement
   endtask
 
+  assign io_dram_data = write_enable ? i_dram_data : 'z;
+  assign o_dram_data  = io_dram_data;
+
   initial begin
     $dumpfile("fpga_top_level_tb.vcd"); // Initialize VCD dump
     $dumpvars(0, fpga_top_level_tb);    // Dump all variables in this module
-    i_rst_n   <= '0; // Assert reset
-    i_rx      <= '1;
+    i_rst_n      <= '0; // Assert reset
+    write_enable <= '0;
+    i_rx         <= '1;
     repeat (2) @(posedge i_sys_clk);
-    i_rst_n   <= '1;
+    i_rst_n      <= '1;
     #(205000)
     
     repeat (10) @(posedge i_sys_clk);
-    transmit_uart_packet = 8'b01010101;
-    transmit_uart_stream(transmit_uart_packet);
-    
-    //recieve_uart_stream(recieve_uart_packet);
 
+    /* ----- READ ----- */
+    transmit_uart_packet = 8'h77; // 'w'
+    transmit_uart_stream(transmit_uart_packet);
+
+    transmit_uart_packet = 8'd5;  // address
+    transmit_uart_stream(transmit_uart_packet);
+
+    transmit_uart_packet = 8'd15;  // data
+    transmit_uart_stream(transmit_uart_packet);
+
+    /* ----- READ ----- */
+    fork
+      begin
+        transmit_uart_packet = 8'h72; // 'r'
+        transmit_uart_stream(transmit_uart_packet);
+    
+        transmit_uart_packet = 8'd5;  // address
+        transmit_uart_stream(transmit_uart_packet);
+      end
+      
+      begin
+        write_enable <= '1;
+        i_dram_data <= 16'hDEAD;
+      end
+    join
+    write_enable <= '0;
+
+    recieve_uart_stream(recieve_uart_packet);
+    $display("Read packet is %h", recieve_uart_packet);
+
+    repeat(1000) @(posedge i_sys_clk);
+    //recieve_uart_stream(recieve_uart_packet);
+    
     $display("fpga top level test complete");
     $finish;
   end

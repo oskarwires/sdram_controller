@@ -10,41 +10,43 @@ module sdram_ctrl #(
   parameter  TrpTime        = 20,           /* Nanoseconds */
   parameter  TrcdTime       = 20,           /* Nanoseconds */
   parameter  TarfcTime      = 70,           /* Nanoseconds */
-  localparam AddrWidth      = BankWidth + ColWidth + RowWidth,
+  parameter  OAddrWidth     = 12,
+  /* {BA1, BA0, Col[7:0], Row[11:0]} */
+  localparam IAddrWidth     = BankWidth + ColWidth + RowWidth, 
   localparam CyclesPerWait  = ClockFreq / (1_000_000 / WaitTime),
-  localparam CyclesPerTrp   = ClockFreq / (1_000_000_000 / TrpTime),
-  localparam CyclesPerTarfc = ClockFreq / (1_000_000_000 / TarfcTime),
-  localparam CyclesPerTrcd  = ClockFreq / (1_000_000_000 / TrcdTime),
-  localparam CyclesPerTmrd  = 2,            /* 2 Clock Cycles */
+  localparam CyclesPerTrp   = ClockFreq / (1_000_000_000 / TrpTime) + 1,
+  localparam CyclesPerTarfc = ClockFreq / (1_000_000_000 / TarfcTime) + 1,
+  localparam CyclesPerTrcd  = ClockFreq / (1_000_000_000 / TrcdTime) + 1,
+  localparam CyclesPerTmrd  = 2 + 1,            /* 2 Clock Cycles */
   localparam CounterWidth   = $clog2(ClockFreq)
 )(
   /* System Signals */
-  input  logic                 i_sys_clk,    /* System Clock Frequency */
-  input  logic                 i_dram_clk,   /* PLL Generated DRAM Clock */
-  input  logic                 i_rst_n,      /* Sync Active Low Reset */
+  input  logic                  i_sys_clk,    /* System Clock Frequency */
+  input  logic                  i_dram_clk,   /* PLL Generated DRAM Clock */
+  input  logic                  i_rst_n,      /* Sync Active Low Reset */
   /* ----- User signals ----- */
   /* Write Port */
-  input  logic                 i_wr_req,
-  input  logic [AddrWidth-1:0] i_wr_addr,
-  input  logic [DataWidth-1:0] i_wr_data,
+  input  logic                  i_wr_req,
+  input  logic [IAddrWidth-1:0] i_wr_addr,
+  input  logic [DataWidth-1:0]  i_wr_data,
   /* Read Port */
-  input  logic                 i_rd_req,
-  input  logic [AddrWidth-1:0] i_rd_addr,
-  output logic [DataWidth-1:0] o_rd_data,
-  output logic                 o_rd_rdy,
+  input  logic                  i_rd_req,
+  input  logic [IAddrWidth-1:0] i_rd_addr,
+  output logic [DataWidth-1:0]  o_rd_data,
+  output logic                  o_rd_rdy,
   /* ----- SDRAM signals ----- */
-  output logic [AddrWidth-1:0] o_dram_addr,  /* Read/Write Address */
-  inout  tri   [DataWidth-1:0] o_dram_data,  /* Read/Write Data */
-  output logic                 o_dram_ba_0,  /* Bank Address [0] */
-  output logic                 o_dram_ba_1,  /* Bank Address [1] */
-  output logic                 o_dram_ldqm,  /* Low byte data mask */
-  output logic                 o_dram_udqm,  /* High byte data mask */
-  output logic                 o_dram_we_n,  /* Write enable */
-  output logic                 o_dram_cas_n, /* Column address strobe */
-  output logic                 o_dram_ras_n, /* Row address strobe */
-  output logic                 o_dram_cs_n,  /* Chip select */
-  output logic                 o_dram_clk,   /* DRAM Clock */
-  output logic                 o_dram_cke    /* Clock Enable */
+  output logic [OAddrWidth-1:0] o_dram_addr,  /* Read/Write Address */
+  inout  tri   [DataWidth-1:0]  io_dram_data,  /* Read/Write Data */
+  output logic                  o_dram_ba_0,  /* Bank Address [0] */
+  output logic                  o_dram_ba_1,  /* Bank Address [1] */
+  output logic                  o_dram_ldqm,  /* Low byte data mask */
+  output logic                  o_dram_udqm,  /* High byte data mask */
+  output logic                  o_dram_we_n,  /* Write enable */
+  output logic                  o_dram_cas_n, /* Column address strobe */
+  output logic                  o_dram_ras_n, /* Row address strobe */
+  output logic                  o_dram_cs_n,  /* Chip select */
+  output logic                  o_dram_clk,   /* DRAM Clock */
+  output logic                  o_dram_cke    /* Clock Enable */
 );
  
   logic refresh_en, refresh_req, refresh_ack;
@@ -61,7 +63,7 @@ module sdram_ctrl #(
 
   /* dram_cmd_t = {CS, RAS, CAS, WE} */
   typedef enum logic [3:0] {
-    CMD_NOP      = 4'b0111,
+    CMD_NOP      = 4'b1zzz,
     CMD_RD_RDA   = 4'b0101,
     CMD_WR_WRA   = 4'b0100,
     CMD_ACT      = 4'b0011,
@@ -331,7 +333,7 @@ module sdram_ctrl #(
         counter_rst_n = 1'b0;
         cmd = CMD_MRS;
         /* {A[11] = 0, A[10] = 0, A[9] = WB, A[8] = 0, A[7] = 0, A[6:4] = CAS Latency, A[3] = Burst Type, A[2:0] = Burst Length} */
-        o_dram_addr = {1'b0, 1'b0, 1'b0, 1'b0, 1'b0, 3'b011, 1'b0, 3'b000}; 
+        o_dram_addr = {1'b0, 1'b0, 1'b1, 1'b0, 1'b0, 3'b011, 1'b0, 3'b000}; 
         write_enable = 1'b0;
         refresh_en = 1'b0;
         {o_dram_ba_0, o_dram_ba_1} = 2'b00;
@@ -372,97 +374,89 @@ module sdram_ctrl #(
       EXEC_WRITE_ACT: begin
         counter_rst_n = 1'b0;
         cmd = CMD_ACT;
-        o_dram_addr = i_wr_addr[BankWidth+ColWidth+RowWidth-1:BankWidth+ColWidth]; /* {A[0:11] = Rows} */
+        o_dram_addr = i_wr_addr[RowWidth-1:0]; /* {A[0:11] = Rows} */
         write_enable = 1'b0;
         refresh_en = 1'b1;
-        {o_dram_ba_0, o_dram_ba_1} = i_wr_addr[BankWidth-1:0];
+        {o_dram_ba_1, o_dram_ba_0} = i_wr_addr[IAddrWidth-1:ColWidth+RowWidth];
         {o_dram_ldqm, o_dram_udqm} = 2'b11;
       end
 
       EXEC_WRITE_WAIT_TRCD: begin
         counter_rst_n = 1'b1;
         cmd = CMD_NOP;
-        o_dram_addr = '0;
+        o_dram_addr = i_wr_addr[RowWidth-1:0]; /* {A[0:11] = Rows} */
         write_enable = 1'b0;
         refresh_en = 1'b1;
-        {o_dram_ba_0, o_dram_ba_1} = i_wr_addr[BankWidth-1:0];
+        {o_dram_ba_1, o_dram_ba_0} = i_wr_addr[IAddrWidth-1:ColWidth+RowWidth];
         {o_dram_ldqm, o_dram_udqm} = 2'b11;
       end
 
       EXEC_WRITE_WRITE: begin
         counter_rst_n = 1'b0;
         cmd = CMD_WR_WRA;
-        o_dram_addr = {1'b0, 1'b1, 1'b1, 0'b0, i_wr_addr[BankWidth+ColWidth-1:BankWidth]}; /* {A[11] = ?, A[10] = Auto Precharge, A[9] = Single Write, A[8] = ?,  A[0:7] = Cols} */
+        o_dram_addr = {1'b0, 1'b1, 1'b1, 1'b0, i_wr_addr[RowWidth+ColWidth-1:RowWidth]}; /* {A[11] = ?, A[10] = Auto Precharge, A[9] = Single Write, A[8] = ?,  A[0:7] = Cols} */
         write_enable = 1'b1;
         refresh_en = 1'b1;
-        {o_dram_ba_0, o_dram_ba_1} = i_wr_addr[BankWidth-1:0];
+        {o_dram_ba_1, o_dram_ba_0} = i_wr_addr[IAddrWidth-1:ColWidth+RowWidth];
         {o_dram_ldqm, o_dram_udqm} = 2'b00; /* Low so we can control the data buffer, DQM Write Latency is 0 cycles */
       end
 
       EXEC_READ_ACT: begin
         counter_rst_n = 1'b0;
         cmd = CMD_ACT;
-        o_dram_addr = i_wr_addr; /* {A[0:11] = Rows} */
+        o_dram_addr = i_wr_addr[RowWidth-1:0]; /* {A[0:11] = Rows} */
         write_enable = 1'b0;
         refresh_en = 1'b1;
-        {o_dram_ba_0, o_dram_ba_1} = i_wr_addr[BankWidth-1:0];
-        {o_dram_ldqm, o_dram_udqm} = 2'b11; /* High so we *don't* control the data buffer, DQM Read Latency is 2 cycles */
+        {o_dram_ba_1, o_dram_ba_0} = i_wr_addr[IAddrWidth-1:ColWidth+RowWidth];
+        {o_dram_ldqm, o_dram_udqm} = 2'b00; /* High so we *don't* control the data buffer, DQM Read Latency is 2 cycles */
       end
 
       EXEC_READ_WAIT_TRCD: begin
         counter_rst_n = 1'b1;
         cmd = CMD_NOP;
-        o_dram_addr = i_wr_addr[BankWidth+ColWidth+RowWidth-1:BankWidth+ColWidth];
+        o_dram_addr = i_wr_addr[RowWidth-1:0]; /* {A[0:11] = Rows} */
         write_enable = 1'b0;
         refresh_en = 1'b1;
-        {o_dram_ba_0, o_dram_ba_1} = i_wr_addr[BankWidth-1:0];
-        {o_dram_ldqm, o_dram_udqm} = 2'b11; /* High so we *don't* control the data buffer, DQM Read Latency is 2 cycles */
+        {o_dram_ba_1, o_dram_ba_0} = i_wr_addr[IAddrWidth-1:ColWidth+RowWidth];
+        {o_dram_ldqm, o_dram_udqm} = 2'b00; /* High so we *don't* control the data buffer, DQM Read Latency is 2 cycles */
       end
 
       EXEC_READ_READ: begin
         counter_rst_n = 1'b0;
         cmd = CMD_RD_RDA;
-        o_dram_addr = {1'b0, 1'b1, 1'b1, 0'b0, i_wr_addr[BankWidth+ColWidth-1:BankWidth]}; /* {A[11] = ?, A[10] = Auto Precharge, A[9] = Single Write, A[8] = ?,  A[0:7] = Cols} */
+        o_dram_addr = {1'b0, 1'b1, 1'b1, 1'b0, i_wr_addr[RowWidth+ColWidth-1:RowWidth]}; /* {A[11] = ?, A[10] = Auto Precharge, A[9] = Single Write, A[8] = ?,  A[7:0] = Cols} */
         write_enable = 1'b0;
         refresh_en = 1'b1;
-        {o_dram_ba_0, o_dram_ba_1} = i_wr_addr[BankWidth-1:0];
-        {o_dram_ldqm, o_dram_udqm} = 2'b11; /* High so we *don't* control the data buffer, DQM Read Latency is 2 cycles */
+        {o_dram_ba_1, o_dram_ba_0} = i_wr_addr[IAddrWidth-1:ColWidth+RowWidth];
+        {o_dram_ldqm, o_dram_udqm} = 2'b00; /* High so we *don't* control the data buffer, DQM Read Latency is 2 cycles */
       end
 
       EXEC_READ_WAIT_CAS: begin
         counter_rst_n = 1'b1;
         cmd = CMD_NOP;
-        o_dram_addr = '0; /* {A[11] = ?, A[10] = Auto Precharge, A[9] = Single Write, A[8] = ?,  A[0:7] = Cols} */
+        o_dram_addr = '0;
         write_enable = 1'b0;
         refresh_en = 1'b1;
-        {o_dram_ba_0, o_dram_ba_1} = i_wr_addr[BankWidth-1:0];
-        {o_dram_ldqm, o_dram_udqm} = 2'b11; /* High so we *don't* control the data buffer, DQM Read Latency is 2 cycles */
+        {o_dram_ba_1, o_dram_ba_0} = i_wr_addr[IAddrWidth-1:ColWidth+RowWidth];
+        {o_dram_ldqm, o_dram_udqm} = 2'b00; /* High so we *don't* control the data buffer, DQM Read Latency is 2 cycles */
       end
 
       EXEC_READ_SAMPLE: begin
         o_rd_rdy = 1'b1;
         counter_rst_n = 1'b0;
         cmd = CMD_NOP;
-        o_dram_addr = '0; /* {A[11] = ?, A[10] = Auto Precharge, A[9] = Single Write, A[8] = ?,  A[0:7] = Cols} */
+        o_dram_addr = '0;
         write_enable = 1'b0;
         refresh_en = 1'b1;
-        {o_dram_ba_0, o_dram_ba_1} = '0;
-        {o_dram_ldqm, o_dram_udqm} = 2'b11; /* High so we *don't* control the data buffer, DQM Read Latency is 2 cycles */
+        {o_dram_ba_1, o_dram_ba_0} = i_wr_addr[IAddrWidth-1:ColWidth+RowWidth];
+        {o_dram_ldqm, o_dram_udqm} = 2'b00; /* High so we *don't* control the data buffer, DQM Read Latency is 2 cycles */
       end
 
     endcase
   end
 
-  always_comb begin
-    if (write_enable) begin
-        dram_data_out = i_wr_data;  // Drive the data line during write
-    end else begin
-        dram_data_out = {DataWidth{1'bz}};  // High-impedance state during read
-    end
-  end
-
-  assign o_dram_data = dram_data_out;
-  assign o_rd_data = o_dram_data;
+  assign io_dram_data = write_enable ? i_wr_data : 'z;
+  assign o_rd_data = io_dram_data;
 
   /* Incrementing Counter */
   always_ff @(posedge i_dram_clk)
