@@ -100,7 +100,16 @@ module fpga_top_level_tb();
     transmit_uart_packet = 8'd5;  // address
     transmit_uart_stream(transmit_uart_packet);
 
-    transmit_uart_packet = 8'd15;  // data
+    transmit_uart_packet = 8'd23;  // data
+    transmit_uart_stream(transmit_uart_packet);
+
+    transmit_uart_packet = 8'h77; // 'w'
+    transmit_uart_stream(transmit_uart_packet);
+
+    transmit_uart_packet = 8'd15;  // address
+    transmit_uart_stream(transmit_uart_packet);
+
+    transmit_uart_packet = 8'd154;  // data
     transmit_uart_stream(transmit_uart_packet);
 
     /* ----- READ ----- */

@@ -1,27 +1,27 @@
 module fpga_top_level #(
   parameter ClockFreq = 133_000_000,
   parameter IAddrWidth = 22,
-  parameter OAddrWidth = 13,
+  parameter OAddrWidth = 12,
   parameter DataWidth = 16,
   parameter SendDelay = 100 /* Clock Cycles */
 )(
   /* ----- Main Signals ----- */
   input  logic                  i_sys_clk,
-  output logic                  o_sdram_clk, /* A copy for signal analyzer */
+  output logic                  o_sdram_clk,    /* A copy for signal analyzer */
   input  logic                  i_rst_n,
   /* ----- SDRAM Signals ----- */
-  output logic [OAddrWidth-1:0] o_dram_addr,  /* Read/Write Address */
-  inout  tri   [DataWidth-1:0]  io_dram_data, /* Read/Write Data */
-  output logic                  o_dram_ba_0,  /* Bank Address [0] */
-  output logic                  o_dram_ba_1,  /* Bank Address [1] */
-  output logic                  o_dram_ldqm,  /* Low byte data mask */
-  output logic                  o_dram_udqm,  /* High byte data mask */
-  output logic                  o_dram_we_n,  /* Write enable */
-  output logic                  o_dram_cas_n, /* Column address strobe */
-  output logic                  o_dram_ras_n, /* Row address strobe */
-  output logic                  o_dram_cs_n,  /* Chip select */
-  output logic                  o_dram_clk,   /* DRAM Clock */
-  output logic                  o_dram_cke,   /* Clock Enable */
+  output logic [OAddrWidth-1:0] o_dram_addr,    /* Read/Write Address */
+  inout  tri   [DataWidth-1:0]  io_dram_data,   /* Read/Write Data */
+  output logic                  o_dram_ba_0,    /* Bank Address [0] */
+  output logic                  o_dram_ba_1,    /* Bank Address [1] */
+  output logic                  o_dram_ldqm,    /* Low byte data mask */
+  output logic                  o_dram_udqm,    /* High byte data mask */
+  output logic                  o_dram_we_n,    /* Write enable */
+  output logic                  o_dram_cas_n,   /* Column address strobe */
+  output logic                  o_dram_ras_n,   /* Row address strobe */
+  output logic                  o_dram_cs_n,    /* Chip select */
+  output logic                  o_dram_clk,     /* DRAM Clock */
+  output logic                  o_dram_cke,     /* Clock Enable */
   /* ----- UART Signals ----- */
   input  logic                  i_rx,
   output logic                  o_tx
@@ -42,6 +42,7 @@ module fpga_top_level #(
 
   logic write_dram_en;
   logic read_dram_en;
+  logic dram_clk;
 
   uart #(
 	  .BaudRate(115200),
@@ -86,7 +87,7 @@ module fpga_top_level #(
     .o_dram_cas_n,
     .o_dram_ras_n,
     .o_dram_cs_n, 
-    .o_dram_clk,  
+    .o_dram_clk(dram_clk),  
     .o_dram_cke   
   );
 
@@ -97,6 +98,7 @@ module fpga_top_level #(
 	 .c0(o_sdram_clk)
   );
   */
+  assign o_dram_clk = ~dram_clk;
   assign o_sdram_clk = i_sys_clk;
 
   typedef enum logic [3:0] {
