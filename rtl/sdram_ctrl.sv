@@ -189,10 +189,10 @@ module sdram_ctrl #(
 
       INIT_WAIT: begin
         counter_rst_n              <= 1'b1;
-        o_dram_addr                <= '0;
+        o_dram_addr                <= 'z;
         write_enable               <= 1'b0;
         refresh_en                 <= 1'b0;
-        {o_dram_ba_0, o_dram_ba_1} <= 2'b00;
+        {o_dram_ba_0, o_dram_ba_1} <= 'z;
         {o_dram_ldqm, o_dram_udqm} <= 2'b11;
       end
 
@@ -208,10 +208,10 @@ module sdram_ctrl #(
 
       INIT_WAIT_TRP: begin
         counter_rst_n              <= 1'b1;
-        o_dram_addr                <= '0;
+        o_dram_addr                <= 'z;
         write_enable               <= 1'b0;
         refresh_en                 <= 1'b0;
-        {o_dram_ba_0, o_dram_ba_1} <= 2'b00;
+        {o_dram_ba_0, o_dram_ba_1} <= 'z;
         {o_dram_ldqm, o_dram_udqm} <= 2'b11;
       end
 
@@ -227,10 +227,10 @@ module sdram_ctrl #(
 
       INIT_WAIT_TARFC_1: begin
         counter_rst_n              <= 1'b1;
-        o_dram_addr                <= '0;
+        o_dram_addr                <= 'z;
         write_enable               <= 1'b0;
         refresh_en                 <= 1'b0;
-        {o_dram_ba_0, o_dram_ba_1} <= 2'b00;
+        {o_dram_ba_0, o_dram_ba_1} <= 'z;
         {o_dram_ldqm, o_dram_udqm} <= 2'b11;
       end
 
@@ -246,10 +246,10 @@ module sdram_ctrl #(
 
       INIT_WAIT_TARFC_2: begin
         counter_rst_n              <= 1'b1;
-        o_dram_addr                <= '0;
+        o_dram_addr                <= 'z;
         write_enable               <= 1'b0;
         refresh_en                 <= 1'b0;
-        {o_dram_ba_0, o_dram_ba_1} <= 2'b00;
+        {o_dram_ba_0, o_dram_ba_1} <= 'z;
         {o_dram_ldqm, o_dram_udqm} <= 2'b11;
       end
 
@@ -266,19 +266,19 @@ module sdram_ctrl #(
 
       INIT_WAIT_TMRD: begin
         counter_rst_n              <= 1'b1;
-        o_dram_addr                <= '0;
+        o_dram_addr                <= 'z;
         write_enable               <= 1'b0;
         refresh_en                 <= 1'b0;
-        {o_dram_ba_0, o_dram_ba_1} <= 2'b00;
+        {o_dram_ba_0, o_dram_ba_1} <= 'z;
         {o_dram_ldqm, o_dram_udqm} <= 2'b11;
       end
 
       RDY_NOP: begin
         counter_rst_n              <= 1'b0;
-        o_dram_addr                <= '0;
+        o_dram_addr                <= 'z;
         write_enable               <= 1'b0;
         refresh_en                 <= 1'b1;
-        {o_dram_ba_0, o_dram_ba_1} <= 2'b00;
+        {o_dram_ba_0, o_dram_ba_1} <= 'z;
         {o_dram_ldqm, o_dram_udqm} <= 2'b11;
       end
 
@@ -305,10 +305,10 @@ module sdram_ctrl #(
 
       EXEC_WRITE_WAIT_TRCD: begin
         counter_rst_n              <= 1'b1;
-        o_dram_addr                <= i_wr_addr[RowWidth-1:0]; /* {A[0:11] <= Rows} */
+        o_dram_addr                <= 'z;
         write_enable               <= 1'b0;
         refresh_en                 <= 1'b1;
-        {o_dram_ba_1, o_dram_ba_0} <= i_wr_addr[IAddrWidth-1:ColWidth+RowWidth];
+        {o_dram_ba_1, o_dram_ba_0} <= 'z;
         {o_dram_ldqm, o_dram_udqm} <= 2'b11;
       end
 
@@ -335,10 +335,10 @@ module sdram_ctrl #(
 
       EXEC_READ_WAIT_TRCD: begin
         counter_rst_n              <= 1'b1;
-        o_dram_addr                <= i_rd_addr[RowWidth-1:0]; /* {A[0:11] <= Rows} */
+        o_dram_addr                <= 'z; /* {A[0:11] <= Rows} */
         write_enable               <= 1'b0;
         refresh_en                 <= 1'b1;
-        {o_dram_ba_1, o_dram_ba_0} <= i_rd_addr[IAddrWidth-1:ColWidth+RowWidth];
+        {o_dram_ba_1, o_dram_ba_0} <= 'z;
         {o_dram_ldqm, o_dram_udqm} <= 2'b00; /* High so we *don't* control the data buffer, DQM Read Latency is 2 cycles */
       end
 
@@ -355,20 +355,20 @@ module sdram_ctrl #(
 
       EXEC_READ_WAIT_CAS: begin
         counter_rst_n              <= 1'b1;
-        o_dram_addr                <= '0;
+        o_dram_addr                <= 'z;
         write_enable               <= 1'b0;
         refresh_en                 <= 1'b1;
-        {o_dram_ba_1, o_dram_ba_0} <= i_rd_addr[IAddrWidth-1:ColWidth+RowWidth];
+        {o_dram_ba_1, o_dram_ba_0} <= 'z;
         {o_dram_ldqm, o_dram_udqm} <= 2'b00; /* High so we *don't* control the data buffer, DQM Read Latency is 2 cycles */
       end
 
       EXEC_READ_SAMPLE: begin
         o_rd_rdy                   <= 1'b1;
         counter_rst_n              <= 1'b0;
-        o_dram_addr                <= '0;
+        o_dram_addr                <= 'z;
         write_enable               <= 1'b0;
         refresh_en                 <= 1'b1;
-        {o_dram_ba_1, o_dram_ba_0} <= i_rd_addr[IAddrWidth-1:ColWidth+RowWidth];
+        {o_dram_ba_1, o_dram_ba_0} <= 'z;
         {o_dram_ldqm, o_dram_udqm} <= 2'b00; /* High so we *don't* control the data buffer, DQM Read Latency is 2 cycles */
       end
 
