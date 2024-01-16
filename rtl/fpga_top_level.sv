@@ -123,69 +123,47 @@ module fpga_top_level #(
   // Next State Logic Controller
   always_comb begin
     unique case (curr_state)
+  
+      RESET:                          next_state = WAITING;
+      
+      WAITING: if (uart_rx_rdy)       next_state = UART_RECEIVE;
+               else                   next_state = WAITING; // @ loopback
+      
+      UART_RECEIVE:                   next_state = UART_DECODE;
 
-      RESET:
-        next_state = WAITING;
-
-      WAITING:
-        if (uart_rx_rdy)
-          next_state = UART_RECEIVE;
-        else
-          next_state = WAITING;
-
-      UART_RECEIVE:
-        next_state = UART_DECODE;
-
-      UART_DECODE:
-        if (uart_packet == 8'h77) begin // ASCII "w" for write
+      UART_DECODE: if (uart_packet == 8'h77) begin // ASCII "w" for write
           // Write at next given address, with 8 bit sign extended data after
-          next_state = WRITE_ADDR;
+                                      next_state = WRITE_ADDR;
         end else if (uart_packet == 8'h72) begin // ASCII "r" for read
           // Read at next given address
-          next_state = READ_ADDR;
-        end else begin
-          next_state = UART_INVALID;
-        end
+                                      next_state = READ_ADDR;
+        end else begin      
+                                      next_state = UART_INVALID;
+        end      
+      
+      UART_INVALID:                   next_state = WAITING;
+    
+      READ_ADDR: if (uart_rx_rdy)     next_state = READ_CMD;
+                 else                 next_state = READ_ADDR;
+    
+      READ_CMD:                       next_state = UART_TRANSMIT;
 
-      UART_INVALID:
-        next_state = WAITING;
+      UART_TRANSMIT: if (dram_rd_rdy) next_state = WAITING; 
+                     else             next_state = UART_TRANSMIT;
 
-      READ_ADDR:
-        if (uart_rx_rdy)
-          next_state = READ_CMD;
-        else
-          next_state = READ_ADDR;
+      WRITE_ADDR: if (uart_rx_rdy)    next_state = WRITE_WAIT;
+                  else                next_state = WRITE_ADDR;
 
-      READ_CMD:
-        next_state = UART_TRANSMIT;
+      WRITE_WAIT:                     next_state = WRITE_DATA;
 
-      UART_TRANSMIT:
-        if (dram_rd_rdy) // Wait for DRAM Controller to have read data ready before we send it
-          next_state = WAITING; 
-        else
-          next_state = UART_TRANSMIT;
+      WRITE_DATA: if (uart_rx_rdy)    next_state = WRITE_CMD;
+                  else                next_state = WRITE_DATA;
 
-      WRITE_ADDR:
-        if (uart_rx_rdy)
-          next_state = WRITE_WAIT;
-        else 
-          next_state = WRITE_ADDR;
-
-      WRITE_WAIT:
-        next_state = WRITE_DATA;
-
-      WRITE_DATA:
-        if (uart_rx_rdy)
-          next_state = WRITE_CMD;
-        else 
-          next_state = WRITE_DATA;
-
-      WRITE_CMD:
-        next_state = WAITING;
+      WRITE_CMD:                      next_state = WAITING;
     endcase
   end
 
-  // FSM Output Controller
+  // FSM Output Controller, not registered
   always_comb begin
     case (curr_state) 
       READ_CMD: begin
