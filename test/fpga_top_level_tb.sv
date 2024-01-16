@@ -24,7 +24,6 @@ module fpga_top_level_tb();
     .ClockFreq(ClockFreq)
   ) uut (
     .i_sys_clk,   
-    .o_sdram_clk(),  
     .i_rst_n,     
     .o_dram_addr(), 
     .io_dram_data, 

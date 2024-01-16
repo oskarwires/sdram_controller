@@ -1,13 +1,11 @@
 module fpga_top_level #(
-  parameter ClockFreq = 133_000_000,
+  parameter ClockFreq  = 100_000_000,
   parameter IAddrWidth = 22,
   parameter OAddrWidth = 12,
-  parameter DataWidth = 16,
-  parameter SendDelay = 100 /* Clock Cycles */
+  parameter DataWidth  = 16
 )(
   /* ----- Main Signals ----- */
   input  logic                  i_sys_clk,
-  output logic                  o_sdram_clk,    /* A copy for signal analyzer */
   input  logic                  i_rst_n,
   /* ----- SDRAM Signals ----- */
   output logic [OAddrWidth-1:0] o_dram_addr,    /* Read/Write Address */
@@ -27,9 +25,6 @@ module fpga_top_level #(
   output logic                  o_tx
 ); 
 
-  localparam CounterWidth = $clog2(SendDelay);
-
-  logic [CounterWidth-1:0] send_counter;
   logic counter_en;
   
   logic [7:0] uart_packet;
@@ -49,7 +44,7 @@ module fpga_top_level #(
 	  .SystemClockFreq(ClockFreq)
   ) uart (
     .i_rst_n,
-	  .i_clk(o_sdram_clk),
+	  .i_clk(dram_clk),
 	  .i_rx,
 	  .o_tx,
     .i_tx_data(uart_tx_data),
@@ -67,8 +62,8 @@ module fpga_top_level #(
   sdram_ctrl #(
     .ClockFreq(ClockFreq)
   ) sdram_ctrl (
-    .i_sys_clk(o_sdram_clk),
-    .i_dram_clk(o_sdram_clk),
+    .i_sys_clk(dram_clk),
+    .i_dram_clk(dram_clk),
     .i_rst_n,
     .i_wr_req(dram_wr_req),
     .i_wr_addr(dram_wr_addr),
@@ -87,7 +82,7 @@ module fpga_top_level #(
     .o_dram_cas_n,
     .o_dram_ras_n,
     .o_dram_cs_n, 
-    .o_dram_clk(dram_clk),  
+    .o_dram_clk(),  
     .o_dram_cke   
   );
 
@@ -95,11 +90,13 @@ module fpga_top_level #(
   /*
   pll pll (
     .inclk0(i_sys_clk),
-	 .c0(o_sdram_clk)
+	  .c0(dram_clk),  // SDRAM Clock for controller
+	  .c1(o_dram_clk) // Same frequency as above, but phase inverted by 180 degrees for output
   );
   */
-  assign o_dram_clk = ~dram_clk;
-  assign o_sdram_clk = i_sys_clk;
+
+  assign o_dram_clk = ~i_sys_clk; // For the TB, our system input clock is 100 MHz
+  assign dram_clk   = i_sys_clk;
 
   typedef enum logic [3:0] {
     RESET,
@@ -119,10 +116,9 @@ module fpga_top_level #(
   ctrl_state_t next_state, curr_state;
 
   // State controller
-  always_ff @(posedge o_sdram_clk) begin
+  always_ff @(posedge dram_clk)
     if (!i_rst_n) curr_state <= RESET;
     else          curr_state <= next_state;
-  end
 
   // Next State Logic Controller
   always_comb begin
@@ -208,7 +204,7 @@ module fpga_top_level #(
   end
 
   // TRANSMIT RECIEVED SDRAM DATA
-  always_ff @(posedge o_sdram_clk) begin
+  always_ff @(posedge dram_clk) begin
     if (curr_state == UART_TRANSMIT && dram_rd_rdy && uart_tx_rdy) begin
       uart_tx_data <= dram_rd_data[7:0];
       uart_tx_req  <= '1;
@@ -219,7 +215,7 @@ module fpga_top_level #(
   end
   
   // SAMPLE UART DATA
-  always_ff @(posedge o_sdram_clk) begin
+  always_ff @(posedge dram_clk) begin
     if (uart_rx_rdy && !uart_rx_req) begin
       if (curr_state == WRITE_ADDR) begin
         dram_wr_addr    <= {14'b0, uart_rx_data};
@@ -235,7 +231,7 @@ module fpga_top_level #(
         uart_rx_req     <= 1'b1;
       end
     end else begin
-      uart_rx_req     <= 1'b0;
+      uart_rx_req       <= 1'b0;
     end
   end
 

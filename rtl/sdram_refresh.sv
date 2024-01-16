@@ -1,5 +1,5 @@
 module sdram_refresh #(
-  parameter  ClockFreq       = 133_000_000,
+  parameter  ClockFreq       = 100_000_000,
   parameter  RefreshTime     = 64,   /* In ms */
   parameter  RefreshCycles   = 4096, /* Per RefreshTime */
   localparam ClockPerRefresh = ClockFreq / ((1000 / RefreshTime) * RefreshCycles),
