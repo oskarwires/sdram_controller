@@ -1,4 +1,8 @@
 `timescale 1ns / 1ps
+// TODO: ADD WRITE AND READ BURST SUPPORT (PRETTY EASY TO DO)
+// TODO: ADD ASYNC FIFO (NOT AS EASY)
+// TODO: ABILITY TO UPDATE MRS ON THE FLY MAYBE?
+// TODO: ADD A BUSY SIGNAL UNTIL FIFO IS ADDED, NO WAY FOR USER TO KNOW IF REQUEST ACCEPTED
 module sdram_ctrl #(
   parameter  RowWidth       = 12,
   parameter  ColWidth       = 8,

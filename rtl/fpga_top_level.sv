@@ -1,3 +1,4 @@
+// The purpose of this module is to allow my FPGA to act as a testbench, with UART being used to issue read and write commands to the FPGA
 module fpga_top_level #(
   parameter ClockFreq  = 100_000_000,
   parameter IAddrWidth = 22,
