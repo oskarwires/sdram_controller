@@ -57,7 +57,8 @@ module fpga_top_level #(
     .i_cts(),
     .o_rts(),
     .i_ctrl(),
-    .o_status()
+    .o_status(),
+    .o_rx_error()
   );
 
   sdram_ctrl #(
@@ -135,12 +136,10 @@ module fpga_top_level #(
       UART_DECODE: if (uart_packet == 8'h77) begin // ASCII "w" for write
           // Write at next given address, with 8 bit sign extended data after
                                       next_state = WRITE_ADDR;
-        end else if (uart_packet == 8'h72) begin // ASCII "r" for read
+                   end else if (uart_packet == 8'h72) begin // ASCII "r" for read
           // Read at next given address
                                       next_state = READ_ADDR;
-        end else begin      
-                                      next_state = UART_INVALID;
-        end      
+                   end else           next_state = UART_INVALID;  
       
       UART_INVALID:                   next_state = WAITING;
     

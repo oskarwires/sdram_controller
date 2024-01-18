@@ -111,21 +111,16 @@ module fpga_top_level_tb();
     transmit_uart_packet = 8'd154;  // data
     transmit_uart_stream(transmit_uart_packet);
 
-    /* ----- READ ----- */
-    fork
-      begin
-        transmit_uart_packet = 8'h72; // 'r'
-        transmit_uart_stream(transmit_uart_packet);
-    
-        transmit_uart_packet = 8'd5;  // address
-        transmit_uart_stream(transmit_uart_packet);
-      end
-      
-      begin
-        write_enable <= '1;
-        i_dram_data <= 16'hDEAD;
-      end
-    join
+    write_enable <= '1;
+    i_dram_data  <= 16'hDEAD;
+
+    transmit_uart_packet = 8'h72; // 'r'
+    transmit_uart_stream(transmit_uart_packet);
+  
+    transmit_uart_packet = 8'd5;  // address
+    transmit_uart_stream(transmit_uart_packet);
+
+    repeat (100) @(posedge i_sys_clk);
     write_enable <= '0;
 
     recieve_uart_stream(recieve_uart_packet);

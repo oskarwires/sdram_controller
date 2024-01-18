@@ -22,6 +22,7 @@ module uart #(
   input  logic        i_rx_req,   /* Request to read */
   output logic        o_rx_rdy,   /* Data in RX FIFO */
   output logic        o_tx_rdy,   /* TX FIFO Not Full */
+  output logic        o_rx_error, /* Error in RX, from invalid stop bit, needs clearing by rst_n assertion */
   /* UART Signals */
   input  logic        i_rx,
   output logic        o_tx,
@@ -35,9 +36,6 @@ module uart #(
   logic uart_rx_fifo_write_en, uart_tx_fifo_read_en;
 
   logic fifo_empty; 
-
-  logic uart_rx_fifo_write_en_sync_1, uart_rx_fifo_write_en_sync_2, uart_rx_fifo_write_en_rising;
-  logic uart_tx_fifo_read_en_sync_1,  uart_tx_fifo_read_en_sync_2,  uart_tx_fifo_read_en_rising;
 
   logic tx_fifo_full, tx_fifo_empty;
   logic rx_fifo_full, rx_fifo_empty;
@@ -113,7 +111,8 @@ module uart #(
     .i_rst_n,
     .i_rx(i_rx_sync_2),
     .o_rx_data(uart_rx_data),
-    .o_rx_fifo_write_en(uart_rx_fifo_write_en)
+    .o_rx_fifo_write_en(uart_rx_fifo_write_en),
+    .o_rx_error
   );
  
 endmodule
