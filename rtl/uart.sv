@@ -14,8 +14,6 @@ module uart #(
   input  logic        i_rst_n,    /* Async active low reset */
   input  logic        i_clk,
   /* Module Signals */
-  output logic [31:0] o_status,   /* Status Register */
-  input  logic [31:0] i_ctrl,     /* Control Register */
   input  logic [7:0]  i_tx_data,  /* Byte to send */
   output logic [7:0]  o_rx_data,  /* Recieved byte */
   input  logic        i_tx_req,   /* Request to send */
@@ -116,4 +114,3 @@ module uart #(
   );
  
 endmodule
-

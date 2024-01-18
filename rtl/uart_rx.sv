@@ -75,7 +75,7 @@ module uart_rx #(
       START:
         if (strobe_bit && majority_three(three_bits))
           next_state = WAIT; // If the majority three isn't 0, then we must've had some noise. Cancel the reading
-        else if (strobe_bit && !majority_three(three_bits))
+        else if (strobe_bit && !majority_three(three_bits)) // end of bit strobe AND rx == 0 (start bit)
 	        next_state = LOAD;
 	      else
 	        next_state = START;   // @ loopback
@@ -93,7 +93,7 @@ module uart_rx #(
         else
           next_state = PARITY;  // @ loopback
       STOP:
-        if (strobe_bit && majority_three(three_bits)) // halfway strobe AND rx == 1 (stop bit)
+        if (strobe_bit && majority_three(three_bits)) // end of bit strobe AND rx == 1 (stop bit)
           next_state = READY;
         else if (strobe_bit && !majority_three(three_bits)) // Invalid stop bit
           next_state = ERROR;
@@ -102,21 +102,21 @@ module uart_rx #(
       READY: 
         next_state   = WAIT;
       ERROR: // Reset must be asserted to get out of error state
-        next_state   = ERROR; // @ loopback
+        next_state   = ERROR;   // @ loopback
     endcase
   end
 
   // FSM Output Controller
-  always_comb begin
-    unique case (curr_state)
-      RESET:  {clk_counter_rst_n, bit_counter_rst_n, o_rx_fifo_write_en, shift_reg_en, o_rx_error} = 5'b00000;
-      WAIT:   {clk_counter_rst_n, bit_counter_rst_n, o_rx_fifo_write_en, shift_reg_en, o_rx_error} = 5'b00000;
-      START:  {clk_counter_rst_n, bit_counter_rst_n, o_rx_fifo_write_en, shift_reg_en, o_rx_error} = 5'b10000;
-      LOAD:   {clk_counter_rst_n, bit_counter_rst_n, o_rx_fifo_write_en, shift_reg_en, o_rx_error} = 5'b11010;
-      PARITY: {clk_counter_rst_n, bit_counter_rst_n, o_rx_fifo_write_en, shift_reg_en, o_rx_error} = 5'b10000;
-      STOP:   {clk_counter_rst_n, bit_counter_rst_n, o_rx_fifo_write_en, shift_reg_en, o_rx_error} = 5'b10000;
-      READY:  {clk_counter_rst_n, bit_counter_rst_n, o_rx_fifo_write_en, shift_reg_en, o_rx_error} = 5'b00100;
-      ERROR:  {clk_counter_rst_n, bit_counter_rst_n, o_rx_fifo_write_en, shift_reg_en, o_rx_error} = 5'b00001;
+  always_ff @(posedge i_clk) begin
+    unique case (next_state)
+      RESET:  {clk_counter_rst_n, bit_counter_rst_n, o_rx_fifo_write_en, shift_reg_en, o_rx_error} <= 5'b00000;
+      WAIT:   {clk_counter_rst_n, bit_counter_rst_n, o_rx_fifo_write_en, shift_reg_en, o_rx_error} <= 5'b00000;
+      START:  {clk_counter_rst_n, bit_counter_rst_n, o_rx_fifo_write_en, shift_reg_en, o_rx_error} <= 5'b10000;
+      LOAD:   {clk_counter_rst_n, bit_counter_rst_n, o_rx_fifo_write_en, shift_reg_en, o_rx_error} <= 5'b11010;
+      PARITY: {clk_counter_rst_n, bit_counter_rst_n, o_rx_fifo_write_en, shift_reg_en, o_rx_error} <= 5'b10000;
+      STOP:   {clk_counter_rst_n, bit_counter_rst_n, o_rx_fifo_write_en, shift_reg_en, o_rx_error} <= 5'b10000;
+      READY:  {clk_counter_rst_n, bit_counter_rst_n, o_rx_fifo_write_en, shift_reg_en, o_rx_error} <= 5'b00100;
+      ERROR:  {clk_counter_rst_n, bit_counter_rst_n, o_rx_fifo_write_en, shift_reg_en, o_rx_error} <= 5'b00001;
     endcase
   end
 
@@ -155,8 +155,9 @@ module uart_rx #(
       half_bit     = 1'b0;
     end
   end
-
-
+  
+  /* Majority Three Sampling */
+  // Samples each bit three times, once at the middle of the bit, once 4/10th of the bit period, and once at 6/10th of the bit period
   always_ff @(posedge i_clk, negedge i_rst_n)
     if (!i_rst_n)
       three_bits <= '0;
@@ -183,4 +184,3 @@ module uart_rx #(
       bit_counter <= bit_counter - 3'b1;  
 
 endmodule
-
