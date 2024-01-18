@@ -2,11 +2,10 @@
 // Configurable UART module
 module uart #(
   parameter DataLength      = 8,
-  parameter FifoDepth       = 8,
-  parameter OverSample      = 8,
   parameter BaudRate        = 115200,
+  parameter FifoDepth       = 8,
   parameter SystemClockFreq = 50_000_000,
-  parameter Parity          = 1'b0,
+  parameter Parity          = 1'b0, // 1 if enabled, 0 if not
   parameter ParityEven      = 1'b0, // 1 if even, 0 if odd
   parameter FlowControl     = 1'b0  // 1 if enabled, 0 if disabled (RTS and CTS)
 )(
@@ -28,12 +27,8 @@ module uart #(
   output logic        o_rts    
 );
 
-  logic prescaler_half, prescaler_strobe, prescaler_en;  
-
   logic [DataLength-1:0] uart_rx_data;
   logic uart_rx_fifo_write_en, uart_tx_fifo_read_en;
-
-  logic fifo_empty; 
 
   logic tx_fifo_full, tx_fifo_empty;
   logic rx_fifo_full, rx_fifo_empty;
@@ -110,7 +105,9 @@ module uart #(
     .i_rx(i_rx_sync_2),
     .o_rx_data(uart_rx_data),
     .o_rx_fifo_write_en(uart_rx_fifo_write_en),
+    .i_rx_fifo_full(rx_fifo_full),
     .o_rx_error
   );
  
 endmodule
+

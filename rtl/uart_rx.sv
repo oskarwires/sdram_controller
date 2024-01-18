@@ -1,10 +1,9 @@
 module uart_rx #(
+  parameter  DataLength      = 8,
   parameter  SystemClockFreq = 50_000_000,
   parameter  BaudRate        = 115200,
-  parameter  Parity          = 1'b0,
-  parameter  ParityEven      = 1'b0, // 1 if even, 0 if odd
-  parameter  StopBit         = 1'b1,
-  parameter  DataLength      = 8
+  parameter  Parity          = 1'b0, // 1 if enabled, 0 if not
+  parameter  ParityEven      = 1'b0  // 1 if even, 0 if odd
 )(
   /* Main Signals */
   input  logic                  i_clk, // Assuming this is at baudrate * oversampling
@@ -14,6 +13,7 @@ module uart_rx #(
   output logic [DataLength-1:0] o_rx_data,
   /* FIFO Signals */
   output logic                  o_rx_fifo_write_en,
+  input  logic                  i_rx_fifo_full,
   /* Error Signals */
   output logic                  o_rx_error /* Error, from invalid stop bit, needs clearing by rst_n assertion */
 );
@@ -44,8 +44,10 @@ module uart_rx #(
 
   logic half_bit, strobe_bit;
 
-  logic [2:0] three_bits;
-  logic [1:0] sample_bits; // Which bit to sample strobe for majority three voting, either 0, 1, or 2
+  logic [2:0] three_bits;  // The three bits sampled for majority three
+  logic [1:0] sample_bits; // Which bit to sample for majority three
+  // 0 = No sample
+  // 1,2,3 = Sample bit 1, 2, or 3 for Majority Three
 
   function majority_three(input [2:0] bits);
     casez (bits)
@@ -68,7 +70,7 @@ module uart_rx #(
       RESET:
         next_state   = WAIT;
       WAIT:
-        if (!i_rx)
+        if (!i_rx && !i_rx_fifo_full)
           next_state = START;
         else 
           next_state = WAIT;    // @ loopback
@@ -160,11 +162,11 @@ module uart_rx #(
   // Samples each bit three times, once at the middle of the bit, once 4/10th of the bit period, and once at 6/10th of the bit period
   always_ff @(posedge i_clk, negedge i_rst_n)
     if (!i_rst_n)
-      three_bits <= '0;
+      three_bits                <= '0;
     else if (sample_bits != '0)
       three_bits[sample_bits-1] <= i_rx; // I (cheekily) use the sample_bits from range 1..3, so that 0 is no sample, and 1 is first bit, etc.
     else
-      three_bits <= three_bits; // FF not latch!
+      three_bits                <= three_bits; // FF not latch!
   
   /* Shift Register */
   // Shift in the majority three voted value at the end of every bit
@@ -177,10 +179,19 @@ module uart_rx #(
   /* Decrementing Counter */
   always_ff @(posedge i_clk, negedge i_rst_n)
     if (!i_rst_n)
-      bit_counter <= '1;
+      bit_counter <= DataLength - 1;
     else if (!bit_counter_rst_n)
-      bit_counter <= '1;
+      bit_counter <= DataLength - 1;
     else if (strobe_bit)
       bit_counter <= bit_counter - 3'b1;  
+  
+  start_bit:      assert property (@(posedge i_clk) (curr_state == WAIT && i_rx == 0) |-> ##1 (next_state == START)); // Do we transistion from 0?
+  rx_fifo_full:   assert property (@(posedge i_clk) (i_rx_fifo_full) |-> !o_rx_fifo_write_en); // Don't write to full fifo!
+
+  `ifdef FORMAL
+    // SVA Assertions
+    start_bit:    assert property (@(posedge i_clk) (curr_state == WAIT && i_rx == 0) |-> ##1 (next_state == START));
+    rx_fifo_full: assert property (@(posedge i_clk) (i_rx_fifo_full) |-> !o_rx_fifo_write_en); // Don't write to full fifo!
+  `endif
 
 endmodule
