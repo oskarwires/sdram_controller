@@ -56,8 +56,6 @@ module fpga_top_level #(
     .i_tx_req(uart_tx_req),
     .i_cts(),
     .o_rts(),
-    .i_ctrl(),
-    .o_status(),
     .o_rx_error()
   );
 
