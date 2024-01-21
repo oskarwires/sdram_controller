@@ -234,7 +234,7 @@ module sdram_ctrl #(
         o_dram_addr                <= '0;
         write_enable               <= 1'b0;
         refresh_en                 <= 1'b0;
-        open_rows                  <= '{default: 'z};
+        open_rows                  <= '{default: 'x};
         {o_dram_ba_0, o_dram_ba_1} <= 2'b00;
       end
 
@@ -324,6 +324,7 @@ module sdram_ctrl #(
       end
 
       EXEC_REF: begin
+        open_rows                  <= '{default: 'x}; // Reset all open rows, as they are automatically closed in refresh
         refresh_ack                <= 1'b1;
         counter_rst_n              <= 1'b0;
         cmd                        <= CMD_REF;
