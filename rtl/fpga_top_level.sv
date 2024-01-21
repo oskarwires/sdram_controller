@@ -131,31 +131,29 @@ module fpga_top_level #(
       
       UART_RECEIVE:                   next_state = UART_DECODE;
 
-      UART_DECODE: if (uart_packet == 8'h77) begin // ASCII "w" for write
-          // Write at next given address, with 8 bit sign extended data after
-                                      next_state = WRITE_ADDR;
-                   end else if (uart_packet == 8'h72) begin // ASCII "r" for read
-          // Read at next given address
-                                      next_state = READ_ADDR;
+      UART_DECODE: if (uart_packet == 8'h77) begin             // ASCII "w" for write
+                                      next_state = WRITE_ADDR; // Write at next given address, with 8 bit zero extended data after
+                   end else if (uart_packet == 8'h72) begin    // ASCII "r" for read
+                                      next_state = READ_ADDR;  // Read at next given address
                    end else           next_state = UART_INVALID;  
       
       UART_INVALID:                   next_state = WAITING;
     
       READ_ADDR: if (uart_rx_rdy)     next_state = READ_CMD;
-                 else                 next_state = READ_ADDR;
+                 else                 next_state = READ_ADDR; // @ loopback
     
       READ_CMD:                       next_state = UART_TRANSMIT;
 
       UART_TRANSMIT: if (dram_rd_rdy) next_state = WAITING; 
-                     else             next_state = UART_TRANSMIT;
+                     else             next_state = UART_TRANSMIT; // @ loopback
 
       WRITE_ADDR: if (uart_rx_rdy)    next_state = WRITE_WAIT;
-                  else                next_state = WRITE_ADDR;
+                  else                next_state = WRITE_ADDR; // @ loopback
 
       WRITE_WAIT:                     next_state = WRITE_DATA;
 
       WRITE_DATA: if (uart_rx_rdy)    next_state = WRITE_CMD;
-                  else                next_state = WRITE_DATA;
+                  else                next_state = WRITE_DATA; // @ loopback
 
       WRITE_CMD:                      next_state = WAITING;
     endcase

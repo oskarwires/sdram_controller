@@ -111,6 +111,8 @@ module fpga_top_level_tb();
     transmit_uart_packet = 8'd154;  // data
     transmit_uart_stream(transmit_uart_packet);
 
+    repeat (100) @(posedge i_sys_clk);
+
     write_enable <= '1;
     i_dram_data  <= 16'hDEAD;
 
@@ -118,6 +120,12 @@ module fpga_top_level_tb();
     transmit_uart_stream(transmit_uart_packet);
   
     transmit_uart_packet = 8'd5;  // address
+    transmit_uart_stream(transmit_uart_packet);
+
+    transmit_uart_packet = 8'h72; // 'r'
+    transmit_uart_stream(transmit_uart_packet);
+  
+    transmit_uart_packet = 8'd7;  // address
     transmit_uart_stream(transmit_uart_packet);
 
     repeat (100) @(posedge i_sys_clk);

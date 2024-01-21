@@ -27,7 +27,7 @@ module sdram_ctrl_tb();
     .i_rd_addr,
     .o_rd_data,
     .o_dram_addr(), 
-    .o_dram_data(), 
+    .io_dram_data(), 
     .o_dram_ba_0(), 
     .o_dram_ba_1(), 
     .o_dram_ldqm(), 
@@ -64,7 +64,17 @@ module sdram_ctrl_tb();
     @(posedge i_dram_clk); // Sync back to clock
     i_wr_req  <= '1;
     i_wr_data <= $random;
-    i_wr_addr <= {12'd13, 8'd5, 2'd0};
+    i_wr_addr <= {2'd0, 8'd5, 12'd13};
+    @(posedge i_dram_clk);
+    i_wr_req <= '0; // Deassert request
+    @(posedge i_dram_clk);
+
+    repeat (50) @(posedge i_dram_clk);
+
+    @(posedge i_dram_clk); // Sync back to clock
+    i_wr_req  <= '1;
+    i_wr_data <= $random;
+    i_wr_addr <= {2'd0, 8'd5, 12'd13};
     @(posedge i_dram_clk);
     i_wr_req <= '0; // Deassert request
     @(posedge i_dram_clk);
@@ -72,7 +82,23 @@ module sdram_ctrl_tb();
     repeat (50) @(posedge i_dram_clk);
     
     i_rd_req  <= '1;
-    i_rd_addr <= {12'd13, 8'd5, 2'd0};
+    i_rd_addr <= {2'd0, 8'd5, 12'd13};
+    @(posedge i_dram_clk);
+    i_rd_req <= '0; // Deassert request
+    @(posedge i_dram_clk);
+
+    repeat(50) @(posedge i_dram_clk);
+
+    i_rd_req  <= '1;
+    i_rd_addr <= {2'd0, 8'd10, 12'd53};
+    @(posedge i_dram_clk);
+    i_rd_req <= '0; // Deassert request
+    @(posedge i_dram_clk);
+
+    repeat(50) @(posedge i_dram_clk);
+
+    i_rd_req  <= '1;
+    i_rd_addr <= {2'd0, 8'd15, 12'd53};
     @(posedge i_dram_clk);
     i_rd_req <= '0; // Deassert request
     @(posedge i_dram_clk);
