@@ -1,9 +1,10 @@
 // The purpose of this module is to allow my FPGA to act as a testbench, with UART being used to issue read and write commands to the FPGA
 module fpga_top_level #(
-  parameter ClockFreq  = 100_000_000,
-  parameter IAddrWidth = 22,
-  parameter OAddrWidth = 12,
-  parameter DataWidth  = 16
+  parameter ClockFreq   = 100_000_000,
+  parameter IAddrWidth  = 22,
+  parameter OAddrWidth  = 12,
+  parameter DataWidth   = 16,
+  parameter BurstLength = 4
 )(
   /* ----- Main Signals ----- */
   input  logic                  i_sys_clk,
@@ -26,6 +27,8 @@ module fpga_top_level #(
   output logic                  o_tx
 ); 
 
+  localparam WordCounterWidth = $clog2(BurstLength);
+
   logic counter_en;
   
   logic [7:0] uart_packet;
@@ -33,7 +36,8 @@ module fpga_top_level #(
   logic uart_tx_req, uart_tx_rdy, uart_rx_req, uart_rx_rdy;
   
   logic dram_wr_req, dram_rd_req, dram_rd_rdy;
-  logic [DataWidth-1:0] dram_wr_data, dram_rd_data;
+  logic [DataWidth-1:0]  dram_wr_data [BurstLength];
+  logic [DataWidth-1:0]  dram_rd_data [BurstLength];
   logic [IAddrWidth-1:0] dram_wr_addr, dram_rd_addr;
 
   logic write_dram_en;
@@ -60,7 +64,8 @@ module fpga_top_level #(
   );
 
   sdram_ctrl #(
-    .ClockFreq(ClockFreq)
+    .ClockFreq(ClockFreq),
+    .BurstLength(BurstLength)
   ) sdram_ctrl (
     .i_sys_clk(dram_clk),
     .i_dram_clk(dram_clk),
@@ -95,6 +100,8 @@ module fpga_top_level #(
   );
   */
 
+  logic [WordCounterWidth-1:0] word_counter; 
+
   assign o_dram_clk = ~i_sys_clk; // For the TB, our system input clock is 100 MHz
   assign dram_clk   = i_sys_clk;
 
@@ -124,38 +131,42 @@ module fpga_top_level #(
   always_comb begin
     unique case (curr_state)
   
-      RESET:                          next_state = WAITING;
-      
-      WAITING: if (uart_rx_rdy)       next_state = UART_RECEIVE;
-               else                   next_state = WAITING; // @ loopback
-      
-      UART_RECEIVE:                   next_state = UART_DECODE;
-
+      RESET:                                                             next_state = WAITING;
+                                          
+      WAITING: if (uart_rx_rdy)                                          next_state = UART_RECEIVE;
+               else                                                      next_state = WAITING; // @ loopback
+                                          
+      UART_RECEIVE:                                                      next_state = UART_DECODE;
+    
       UART_DECODE: if (uart_packet == 8'h77) begin             // ASCII "w" for write
-                                      next_state = WRITE_ADDR; // Write at next given address, with 8 bit zero extended data after
+                                                                         next_state = WRITE_ADDR; // Write at next given address, with 8 bit zero extended data after
                    end else if (uart_packet == 8'h72) begin    // ASCII "r" for read
-                                      next_state = READ_ADDR;  // Read at next given address
-                   end else           next_state = UART_INVALID;  
-      
-      UART_INVALID:                   next_state = WAITING;
+                                                                         next_state = READ_ADDR;  // Read at next given address
+                   end else                                              next_state = UART_INVALID;  
+                                         
+      UART_INVALID:                                                      next_state = WAITING;
+                                       
+      READ_ADDR: if (uart_rx_rdy)                                        next_state = READ_CMD;
+                 else                                                    next_state = READ_ADDR; // @ loopback
+                                       
+      READ_CMD:                                                          next_state = UART_TRANSMIT;
+
+      UART_TRANSMIT: if (BurstLength == 1) 
+                       if (dram_rd_rdy)                                  next_state = WAITING;             
+                       else                                              next_state = UART_TRANSMIT; // @ loopback
+                     else 
+                       if (word_counter == BurstLength - 1)              next_state = WAITING; 
+                       else                                              next_state = UART_TRANSMIT; // @ loopback
     
-      READ_ADDR: if (uart_rx_rdy)     next_state = READ_CMD;
-                 else                 next_state = READ_ADDR; // @ loopback
-    
-      READ_CMD:                       next_state = UART_TRANSMIT;
-
-      UART_TRANSMIT: if (dram_rd_rdy) next_state = WAITING; 
-                     else             next_state = UART_TRANSMIT; // @ loopback
-
-      WRITE_ADDR: if (uart_rx_rdy)    next_state = WRITE_WAIT;
-                  else                next_state = WRITE_ADDR; // @ loopback
-
-      WRITE_WAIT:                     next_state = WRITE_DATA;
-
-      WRITE_DATA: if (uart_rx_rdy)    next_state = WRITE_CMD;
-                  else                next_state = WRITE_DATA; // @ loopback
-
-      WRITE_CMD:                      next_state = WAITING;
+      WRITE_ADDR: if (uart_rx_rdy)                                       next_state = WRITE_WAIT;
+                  else                                                   next_state = WRITE_ADDR; // @ loopback
+                                  
+      WRITE_WAIT:                                                        next_state = WRITE_DATA;
+                                  
+      WRITE_DATA: if (uart_rx_rdy)                                       next_state = WRITE_CMD;
+                  else                                                   next_state = WRITE_DATA; // @ loopback
+                                  
+      WRITE_CMD:                                                         next_state = WAITING;
     endcase
   end
 
@@ -179,12 +190,14 @@ module fpga_top_level #(
 
   // TRANSMIT RECIEVED SDRAM DATA
   always_ff @(posedge dram_clk) begin
-    if (curr_state == UART_TRANSMIT && dram_rd_rdy && uart_tx_rdy) begin
-      uart_tx_data <= dram_rd_data[7:0];
+    if ((curr_state == UART_TRANSMIT && dram_rd_rdy && uart_tx_rdy && word_counter == '0) || (curr_state == UART_TRANSMIT && word_counter != BurstLength && word_counter != '0)) begin
+      uart_tx_data <= dram_rd_data[word_counter][7:0];
       uart_tx_req  <= '1;
+      word_counter <= word_counter + 1'b1;
     end else begin
       uart_tx_data <= '0;
       uart_tx_req  <= '0;
+      word_counter <= '0;
     end
   end
   
@@ -192,20 +205,22 @@ module fpga_top_level #(
   always_ff @(posedge dram_clk) begin
     if (uart_rx_rdy && !uart_rx_req) begin
       if (curr_state == WRITE_ADDR) begin
-        dram_wr_addr    <= {14'b0, uart_rx_data};
-        uart_rx_req     <= 1'b1;
+        dram_wr_addr      <= {14'b0, uart_rx_data};
+        uart_rx_req       <= 1'b1;
       end if (curr_state == UART_RECEIVE) begin
-        uart_packet     <= uart_rx_data;
-        uart_rx_req     <= 1'b1;
+        uart_packet       <= uart_rx_data;
+        uart_rx_req       <= 1'b1;
       end if (curr_state == WRITE_DATA) begin
-        dram_wr_data    <= {8'b0, uart_rx_data};
-        uart_rx_req     <= 1'b1;
+        for (int i = 0; i < BurstLength; i++) begin
+          dram_wr_data[i] <= {8'b0, uart_rx_data+i};
+        end
+        uart_rx_req       <= 1'b1;
       end if (curr_state == READ_ADDR) begin
-        dram_rd_addr    <= {14'b0, uart_rx_data};
-        uart_rx_req     <= 1'b1;
+        dram_rd_addr      <= {14'b0, uart_rx_data};
+        uart_rx_req       <= 1'b1;
       end
     end else begin
-      uart_rx_req       <= 1'b0;
+      uart_rx_req         <= 1'b0;
     end
   end
 

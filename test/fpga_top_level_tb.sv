@@ -3,7 +3,7 @@ module fpga_top_level_tb();
   localparam real ClockPeriod = 1_000_000_000.0 / ClockFreq;
   localparam BaudRate = 115200; // Baud rate
   localparam UartBitCycles = ClockFreq / BaudRate; // Clock cycles per UART bit
-
+  
   real UartBitPeriodNs = 1_000_000_000.0 / BaudRate; // Bit period in nanoseconds
   real HalfBitPeriodNs = UartBitPeriodNs / 2.0;
 
@@ -16,9 +16,12 @@ module fpga_top_level_tb();
   logic [15:0] i_dram_data, o_dram_data;
 
   logic write_enable;
+  logic i_dram_clk;
 
   initial i_sys_clk = 1'b0;
   always #(ClockPeriod / 2) i_sys_clk = ~i_sys_clk;
+  assign i_dram_clk = ~i_sys_clk;
+
 
   fpga_top_level #(
     .ClockFreq(ClockFreq)
@@ -45,6 +48,7 @@ module fpga_top_level_tb();
   task automatic transmit_uart_stream (
     input logic [7:0] uart_packet
   );
+    #(UartBitPeriodNs); // Wait bit period
     // Async assignment of value to model real world async conditions
     i_rx = 0; // Start Bit (0)
     #(UartBitPeriodNs); // Wait bit period
@@ -56,7 +60,6 @@ module fpga_top_level_tb();
     end
 
     i_rx = 1; // Stop bit (1)
-    #(UartBitPeriodNs); // Wait bit period
   endtask
 
   task automatic recieve_uart_stream (
@@ -75,6 +78,23 @@ module fpga_top_level_tb();
     #(UartBitPeriodNs); // Wait for stop bit
 
     assert(o_tx == 1'b1) else $error("No Stop bit detected"); // Stop bit requirement
+  endtask
+
+  task automatic set_sdram_value (
+    input [15:0] value
+  );
+    i_dram_data  <= 'z;
+    repeat (1164) @(posedge i_dram_clk)
+    write_enable <= '1;
+    i_dram_data  <= value + 16'd0;
+    repeat (1) @(posedge i_dram_clk);
+    i_dram_data  <= value + 16'd1;
+    repeat (1) @(posedge i_dram_clk);
+    i_dram_data  <= value + 16'd2;
+    repeat (1) @(posedge i_dram_clk);
+    i_dram_data  <= value + 16'd3;
+    repeat (1) @(posedge i_dram_clk);
+    i_dram_data  <= 'z;
   endtask
 
   assign io_dram_data = write_enable ? i_dram_data : 'z;
@@ -99,7 +119,7 @@ module fpga_top_level_tb();
     transmit_uart_packet = 8'd5;  // address
     transmit_uart_stream(transmit_uart_packet);
 
-    transmit_uart_packet = 8'd23;  // data
+    transmit_uart_packet = 8'd143;  // data
     transmit_uart_stream(transmit_uart_packet);
 
     transmit_uart_packet = 8'h77; // 'w'
@@ -113,28 +133,29 @@ module fpga_top_level_tb();
 
     repeat (100) @(posedge i_sys_clk);
 
-    write_enable <= '1;
-    i_dram_data  <= 16'hDEAD;
-
     transmit_uart_packet = 8'h72; // 'r'
     transmit_uart_stream(transmit_uart_packet);
   
     transmit_uart_packet = 8'd5;  // address
     transmit_uart_stream(transmit_uart_packet);
+    set_sdram_value(16'd143);
+
+    recieve_uart_stream(recieve_uart_packet);
+    $display("Read packet is %h", recieve_uart_packet);
+
+    repeat (1000) @(posedge i_sys_clk);
 
     transmit_uart_packet = 8'h72; // 'r'
     transmit_uart_stream(transmit_uart_packet);
   
     transmit_uart_packet = 8'd7;  // address
     transmit_uart_stream(transmit_uart_packet);
-
-    repeat (100) @(posedge i_sys_clk);
-    write_enable <= '0;
+    set_sdram_value(16'd154);
 
     recieve_uart_stream(recieve_uart_packet);
     $display("Read packet is %h", recieve_uart_packet);
 
-    repeat(1000) @(posedge i_sys_clk);
+    repeat(20000) @(posedge i_sys_clk);
     //recieve_uart_stream(recieve_uart_packet);
     
     $display("fpga top level test complete");
