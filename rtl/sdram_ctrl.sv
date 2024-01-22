@@ -524,7 +524,7 @@ module sdram_ctrl #(
       else                                 o_rd_rdy <= 1'b0;
     else                                   o_rd_rdy <= 1'b0;
 
-  /* Incrementing Word clk_counter */
+  /* Incrementing word counter */
   always_ff @(posedge i_dram_clk)
     if (!i_rst_n)
       word_counter <= '0;
@@ -533,7 +533,7 @@ module sdram_ctrl #(
     else
       word_counter <= word_counter + 1'b1;
 
-  /* Incrementing Clock clk_counter */
+  /* Incrementing clock counter */
   always_ff @(posedge i_dram_clk)
     if (!i_rst_n)
       clk_counter <= '0;
