@@ -4,27 +4,27 @@
 // TODO: ABILITY TO UPDATE MRS ON THE FLY MAYBE?
 // TODO: ADD A BUSY SIGNAL UNTIL FIFO IS ADDED, NO WAY FOR USER TO KNOW IF REQUEST ACCEPTED
 module sdram_ctrl #(
-  parameter        RowWidth       = 12,
-  parameter        ColWidth       = 8,
-  parameter        BankWidth      = 2,
-  parameter        DataWidth      = 16,
-  parameter        CasLatency     = 2,
-  parameter        ClockFreq      = 100_000_000,  /* MHz of DRAM Clock */
-  parameter        WaitTime       = 200,          /* Microseconds */
-  parameter        TrpTime        = 20,           /* Nanoseconds */
-  parameter        TrcdTime       = 20,           /* Nanoseconds */
-  parameter        TarfcTime      = 70,           /* Nanoseconds */
-  parameter        CyclesPerTmrd  = 2,            /* Clock Cycles */
-  parameter        CyclesPerTrdl  = 2,            /* Clock Cycles */
-  parameter        OAddrWidth     = 12,  
-  parameter  logic AutoPrecharge  = 0,            // 1 if enabled, 0 if disabled
+  parameter logic       AutoPrecharge  = 0,            // 1 if enabled, 0 if disabled
+  parameter             RowWidth       = 12,
+  parameter             ColWidth       = 8,
+  parameter             BankWidth      = 2,
+  parameter             DataWidth      = 16,
+  parameter             CasLatency     = 2,
+  parameter             ClockFreq      = 100_000_000,  /* MHz of DRAM Clock */
+  parameter             WaitTime       = 200,          /* Microseconds */
+  parameter             TrpTime        = 20,           /* Nanoseconds */
+  parameter             TrcdTime       = 20,           /* Nanoseconds */
+  parameter             TarfcTime      = 70,           /* Nanoseconds */
+  parameter             CyclesPerTmrd  = 2,            /* Clock Cycles */
+  parameter             CyclesPerTrdl  = 2,            /* Clock Cycles */
+  parameter             OAddrWidth     = 12,  
   /* {BA1, BA0, Col[7:0], Row[11:0]} */
-  localparam       IAddrWidth     = BankWidth + ColWidth + RowWidth, 
-  localparam       CyclesPerWait  = ClockFreq / (1_000_000 / WaitTime),
-  localparam       CyclesPerTrp   = ClockFreq / (1_000_000_000 / TrpTime) + 1, // Add 1 clock cycle for safety :)
-  localparam       CyclesPerTarfc = ClockFreq / (1_000_000_000 / TarfcTime) + 1,
-  localparam       CyclesPerTrcd  = ClockFreq / (1_000_000_000 / TrcdTime) + 1,
-  localparam       CounterWidth   = $clog2(ClockFreq)
+  localparam            IAddrWidth     = BankWidth + ColWidth + RowWidth, 
+  localparam            CyclesPerWait  = ClockFreq / (1_000_000 / WaitTime),
+  localparam            CyclesPerTrp   = ClockFreq / (1_000_000_000 / TrpTime) + 1, // Add 1 clock cycle for safety :)
+  localparam            CyclesPerTarfc = ClockFreq / (1_000_000_000 / TarfcTime) + 1,
+  localparam            CyclesPerTrcd  = ClockFreq / (1_000_000_000 / TrcdTime) + 1,
+  localparam            CounterWidth   = $clog2(ClockFreq)
 )(
   /* System Signals */
   input  logic                  i_sys_clk,    /* System Clock Frequency */
@@ -107,6 +107,8 @@ module sdram_ctrl #(
     INIT_WAIT_TMRD,
     RDY_NOP,
     EXEC_REF,
+    EXEC_WAIT_TARFC,
+    EXEC_PRECHARGE_ALL,
     EXEC_WRITE_ACT,
     EXEC_WRITE_WAIT_TRCD,
     EXEC_WRITE_WRITE,
@@ -146,78 +148,86 @@ module sdram_ctrl #(
     // catching states without any case statements
     unique case (curr_state)
 
-      INIT_RESET:                                               next_state = INIT_WAIT;
+      INIT_RESET:                                                 next_state = INIT_WAIT;
     
-      INIT_WAIT:            if (counter == CyclesPerWait - 1)   next_state = INIT_PALL;
-                            else                                next_state = INIT_WAIT;             // @ loopback
+      INIT_WAIT:            if (counter == CyclesPerWait - 1)     next_state = INIT_PALL;
+                            else                                  next_state = INIT_WAIT;             // @ loopback
  
-      INIT_PALL:                                                next_state = INIT_WAIT_TRP;
+      INIT_PALL:                                                  next_state = INIT_WAIT_TRP;
   
-      INIT_WAIT_TRP:        if (counter == CyclesPerTrp - 1)    next_state = INIT_REF_1;
-                            else                                next_state = INIT_WAIT_TRP;         // @ loopback
+      INIT_WAIT_TRP:        if (counter == CyclesPerTrp - 1)      next_state = INIT_REF_1;
+                            else                                  next_state = INIT_WAIT_TRP;         // @ loopback
   
-      INIT_REF_1:                                               next_state = INIT_WAIT_TARFC_1;
+      INIT_REF_1:                                                 next_state = INIT_WAIT_TARFC_1;
   
-      INIT_WAIT_TARFC_1:    if (counter == CyclesPerTarfc - 1)  next_state = INIT_REF_2;
-                            else                                next_state = INIT_WAIT_TARFC_1;     // @ loopback
+      INIT_WAIT_TARFC_1:    if (counter == CyclesPerTarfc - 1)    next_state = INIT_REF_2;
+                            else                                  next_state = INIT_WAIT_TARFC_1;     // @ loopback
  
-      INIT_REF_2:                                               next_state = INIT_WAIT_TARFC_2;
+      INIT_REF_2:                                                 next_state = INIT_WAIT_TARFC_2;
         
-      INIT_WAIT_TARFC_2:    if (counter == CyclesPerTarfc - 1)  next_state = INIT_MRS;
-                            else                                next_state = INIT_WAIT_TARFC_2;     // @ loopback
+      INIT_WAIT_TARFC_2:    if (counter == CyclesPerTarfc - 1)    next_state = INIT_MRS;
+                            else                                  next_state = INIT_WAIT_TARFC_2;     // @ loopback
   
   
-      INIT_MRS:                                                 next_state = INIT_WAIT_TMRD;
+      INIT_MRS:                                                   next_state = INIT_WAIT_TMRD;
   
-      INIT_WAIT_TMRD:       if (counter == CyclesPerTmrd - 1)   next_state = RDY_NOP;
-                            else                                next_state = INIT_WAIT_TMRD;        // @ loopback
+      INIT_WAIT_TMRD:       if (counter == CyclesPerTmrd - 1)     next_state = RDY_NOP;
+                            else                                  next_state = INIT_WAIT_TMRD;        // @ loopback
   
-      RDY_NOP:              if (refresh_req)                    next_state = EXEC_REF;
-                            else if (i_wr_req)                  next_state = EXEC_WRITE_ACT;
-                            else if (i_rd_req) begin
-                              if (rd_row == open_rows[rd_bank]) next_state = EXEC_READ_READ;        // We are reading from an open row, nice! We can skip ACT
+      RDY_NOP:              if (refresh_req)                      next_state = EXEC_REF;
+                            else if (i_wr_req)                    next_state = EXEC_WRITE_ACT;
+                            else if (i_rd_req)
+                              if (AutoPrecharge)                  next_state = EXEC_READ_ACT;
+                              else // Here we handle if we should precharge or not for our read, as we are not autoprecharging
+                                if (rd_row == open_rows[rd_bank]) next_state = EXEC_READ_READ;        // We are reading from an open row, nice! We can skip ACT
                 /* NB: I don't wait tRC for same open row read as I assume that our original read took over 60 ns, unless our clock rate gets too high? */
-                              else                              next_state = EXEC_READ_PRECHARGE;   // We are reading from a closed row :( got to close (precharge) the open one
-                            end else                            next_state = RDY_NOP;               // @ loopback
-    
-      EXEC_REF:                                                 next_state = RDY_NOP;
-    
-      EXEC_WRITE_ACT:                                           next_state = EXEC_WRITE_WAIT_TRCD;
-  
-      EXEC_WRITE_WAIT_TRCD: if (counter == CyclesPerTrcd - 1)   next_state = EXEC_WRITE_WRITE;
-                            else                                next_state = EXEC_WRITE_WAIT_TRCD;  // @ loopback
-       
-      EXEC_WRITE_WRITE:     if (!AutoPrecharge)                 next_state = EXEC_WRITE_WAIT_TRDL;  // If we are not auto precharging, lets precharge manually!
-                            else                                next_state = RDY_NOP;
- 
-      EXEC_WRITE_WAIT_TRDL: if (counter == CyclesPerTrdl - 1)   next_state = EXEC_WRITE_PRECHARGE; 
-                            else                                next_state = EXEC_WRITE_WAIT_TRDL;  // @ loopback
- 
-      EXEC_WRITE_PRECHARGE:                                     next_state = RDY_NOP;
+                                else                              next_state = EXEC_READ_PRECHARGE;   // We are reading from a closed row :( got to close (precharge) the open one
+                            else                                  next_state = RDY_NOP;               // @ loopback
       
-      EXEC_READ_PRECHARGE:                                      next_state = EXEC_READ_WAIT_TRP;
+      EXEC_REF:             if (AutoPrecharge)                    next_state = RDY_NOP;
+                            else                                  next_state = EXEC_WAIT_TARFC;       // Next we wait tARFC, then we precharge all banks to close open regs
+              
+      EXEC_WAIT_TARFC:      if (counter == CyclesPerTarfc - 1)    next_state = EXEC_PRECHARGE_ALL;    // Precharge all banks to close open rows
+                            else                                  next_state = EXEC_WAIT_TARFC;       // @ loopback
 
-      EXEC_READ_WAIT_TRP:   if (counter == CyclesPerTrp - 1)    next_state = EXEC_READ_ACT;
-                            else                                next_state = EXEC_READ_WAIT_TRP;    // @ loopback
- 
-      EXEC_READ_ACT:                                            next_state = EXEC_READ_WAIT_TRCD;
- 
-      EXEC_READ_WAIT_TRCD:  if (counter == CyclesPerTrcd - 1)   next_state = EXEC_READ_READ;
-                            else                                next_state = EXEC_READ_WAIT_TRCD;   // @ loopback
+      EXEC_PRECHARGE_ALL:                                         next_state = RDY_NOP;
+      
+      EXEC_WRITE_ACT:                                             next_state = EXEC_WRITE_WAIT_TRCD;
+    
+      EXEC_WRITE_WAIT_TRCD: if (counter == CyclesPerTrcd - 1)     next_state = EXEC_WRITE_WRITE;
+                            else                                  next_state = EXEC_WRITE_WAIT_TRCD;  // @ loopback
+         
+      EXEC_WRITE_WRITE:     if (AutoPrecharge)                    next_state = RDY_NOP; 
+                            else                                  next_state = EXEC_WRITE_WAIT_TRDL;  // If we are not auto precharging, lets precharge manually!
+   
+      EXEC_WRITE_WAIT_TRDL: if (counter == CyclesPerTrdl - 1)     next_state = EXEC_WRITE_PRECHARGE; 
+                            else                                  next_state = EXEC_WRITE_WAIT_TRDL;  // @ loopback
+   
+      EXEC_WRITE_PRECHARGE:                                       next_state = RDY_NOP;
+        
+      EXEC_READ_PRECHARGE:                                        next_state = EXEC_READ_WAIT_TRP;
   
-      EXEC_READ_READ:                                           next_state = EXEC_READ_WAIT_CAS; 
-  
-      EXEC_READ_WAIT_CAS:   if (counter == CasLatency - 1)      next_state = EXEC_READ_SAMPLE; 
-                            else                                next_state = EXEC_READ_WAIT_CAS;    // @ loopback
-  
-      EXEC_READ_SAMPLE:                                         next_state = RDY_NOP;
+      EXEC_READ_WAIT_TRP:   if (counter == CyclesPerTrp - 1)      next_state = EXEC_READ_ACT;
+                            else                                  next_state = EXEC_READ_WAIT_TRP;    // @ loopback
+   
+      EXEC_READ_ACT:                                              next_state = EXEC_READ_WAIT_TRCD;
+   
+      EXEC_READ_WAIT_TRCD:  if (counter == CyclesPerTrcd - 1)     next_state = EXEC_READ_READ;
+                            else                                  next_state = EXEC_READ_WAIT_TRCD;   // @ loopback
+    
+      EXEC_READ_READ:                                             next_state = EXEC_READ_WAIT_CAS; 
+    
+      EXEC_READ_WAIT_CAS:   if (counter == CasLatency - 1)        next_state = EXEC_READ_SAMPLE; 
+                            else                                  next_state = EXEC_READ_WAIT_CAS;    // @ loopback
+    
+      EXEC_READ_SAMPLE:                                           next_state = RDY_NOP;
  
     endcase
   end
 
   /* 
     If a read request is to a new row in the same bank, then the old row is closed. Otherwise, it's kept open
-    All these read rows left open are closed when the SDRAM refreshes (when instructed to per our timer)
+    All these read rows left open are closed during an all bank precharged, which we do after every refresh cycle (4096 times every 64 ms or every ~15.6 us)
     We close every row after a write
   */
 
@@ -324,7 +334,6 @@ module sdram_ctrl #(
       end
 
       EXEC_REF: begin
-        open_rows                  <= '{default: 'x}; // Reset all open rows, as they are automatically closed in refresh
         refresh_ack                <= 1'b1;
         counter_rst_n              <= 1'b0;
         cmd                        <= CMD_REF;
@@ -332,6 +341,24 @@ module sdram_ctrl #(
         write_enable               <= 1'b0;
         refresh_en                 <= 1'b1;
         {o_dram_ba_0, o_dram_ba_1} <= 2'b00;
+      end
+
+      EXEC_WAIT_TARFC: begin
+        counter_rst_n              <= 1'b1;
+        o_dram_addr                <= 'z;
+        write_enable               <= 1'b0;
+        refresh_en                 <= 1'b1;
+        {o_dram_ba_0, o_dram_ba_1} <= 'z;
+      end
+
+      EXEC_PRECHARGE_ALL: begin
+        open_rows                  <= '{default: 'x}; // Reset all open rows, as we close them here (all bank precharge)
+        counter_rst_n              <= 1'b0;
+        cmd                        <= CMD_PRE_PALL;
+        o_dram_addr                <= {1'bz, 1'b1, {10{1'bz}}}; // A[10] = 1 for all bank precharge
+        write_enable               <= 1'b0;
+        refresh_en                 <= 1'b1;
+        {o_dram_ba_1, o_dram_ba_0} <= 2'b00;
       end
 
       EXEC_WRITE_ACT: begin
