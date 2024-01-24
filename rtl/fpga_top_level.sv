@@ -205,7 +205,9 @@ module fpga_top_level #(
   always_ff @(posedge dram_clk) begin
     if (uart_rx_rdy && !uart_rx_req) begin
       if (curr_state == WRITE_ADDR) begin
-        dram_wr_addr      <= {14'b0, uart_rx_data};
+        // Basically I split the UART Packet into 3 chunks, a 2 bit bank, 3 bit col, and a 3 bit row address.
+        // The unused space in row and col is 0 filled from the MSB side.
+        dram_wr_addr      <= {uart_rx_data[7:6], 5'd0, uart_rx_data[5:3], 9'd0, uart_rx_data[2:0]};
         uart_rx_req       <= 1'b1;
       end if (curr_state == UART_RECEIVE) begin
         uart_packet       <= uart_rx_data;
@@ -216,7 +218,8 @@ module fpga_top_level #(
         end
         uart_rx_req       <= 1'b1;
       end if (curr_state == READ_ADDR) begin
-        dram_rd_addr      <= {14'b0, uart_rx_data};
+        // See comment for dram_wr_addr
+        dram_rd_addr      <= {uart_rx_data[7:6], 5'd0, uart_rx_data[5:3], 9'd0, uart_rx_data[2:0]};
         uart_rx_req       <= 1'b1;
       end
     end else begin

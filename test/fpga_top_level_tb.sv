@@ -116,7 +116,7 @@ module fpga_top_level_tb();
     transmit_uart_packet = 8'h77; // 'w'
     transmit_uart_stream(transmit_uart_packet);
 
-    transmit_uart_packet = 8'd5;  // address
+    transmit_uart_packet = {2'd0, 3'd0, 3'd1};  // address {bank, col, row}
     transmit_uart_stream(transmit_uart_packet);
 
     transmit_uart_packet = 8'd143;  // data
@@ -125,7 +125,7 @@ module fpga_top_level_tb();
     transmit_uart_packet = 8'h77; // 'w'
     transmit_uart_stream(transmit_uart_packet);
 
-    transmit_uart_packet = 8'd15;  // address
+    transmit_uart_packet = {2'd1, 3'd0, 3'd2};  // address
     transmit_uart_stream(transmit_uart_packet);
 
     transmit_uart_packet = 8'd154;  // data
@@ -136,7 +136,7 @@ module fpga_top_level_tb();
     transmit_uart_packet = 8'h72; // 'r'
     transmit_uart_stream(transmit_uart_packet);
   
-    transmit_uart_packet = 8'd5;  // address
+    transmit_uart_packet = {2'd0, 3'd0, 3'd1};  // address
     transmit_uart_stream(transmit_uart_packet);
     set_sdram_value(16'd143);
 
@@ -148,7 +148,7 @@ module fpga_top_level_tb();
     transmit_uart_packet = 8'h72; // 'r'
     transmit_uart_stream(transmit_uart_packet);
   
-    transmit_uart_packet = 8'd7;  // address
+    transmit_uart_packet = {2'd1, 3'd0, 3'd2};  // address
     transmit_uart_stream(transmit_uart_packet);
     set_sdram_value(16'd154);
 
