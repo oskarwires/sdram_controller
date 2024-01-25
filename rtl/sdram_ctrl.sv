@@ -1,7 +1,5 @@
 `timescale 1ns / 1ps
-// TODO: ADD ASYNC FIFO (NOT AS EASY)
-// TODO: ABILITY TO UPDATE MRS ON THE FLY MAYBE?
-// TODO: ADD A BUSY SIGNAL UNTIL FIFO IS ADDED, NO WAY FOR USER TO KNOW IF REQUEST ACCEPTED
+// TODO: ADD ASYNC FIFO. Also, do we need a FIFO? Obviously on a system with a different main clock frequency than the SDRAM's, but is that common?
 module sdram_ctrl #(
   parameter logic       AutoPrecharge    = 0,            // 1 if enabled, 0 if disabled
   parameter             BurstLength      = 4,            // How many values do we read & write? Supported values: 1, 2, 4, 8
@@ -33,6 +31,7 @@ module sdram_ctrl #(
   input  logic                  i_dram_clk,   /* PLL Generated DRAM Clock */
   input  logic                  i_rst_n,      /* Sync Active Low Reset */
   /* ----- User signals ----- */
+  output logic                  o_ready,      /* Is the controller ready for a request? */
   /* Write Port */
   input  logic                  i_wr_req,
   input  logic [IAddrWidth-1:0] i_wr_addr,    /* {Bank, Col, Row} */
@@ -199,7 +198,7 @@ module sdram_ctrl #(
                    else if (i_rd_req)      
                      if (AutoPrecharge)                                 next_state = EXEC_READ_ACT;
                      else // Here we handle if we should precharge and/or ACT for our read, as we are not autoprecharging
-                      if (!open_rows[rd_bank][RowWidth])                next_state = EXEC_READ_ACT; // We haven't read from a row in this bank yet as valid bit isn't set. We can skip precharging and just bank ACTivate
+                       if (!open_rows[rd_bank][RowWidth])                next_state = EXEC_READ_ACT; // We haven't read from a row in this bank yet as valid bit isn't set. We can skip precharging and just bank ACTivate
                        else if (rd_row == open_rows[rd_bank][RowWidth-1:0] && open_rows[rd_bank][RowWidth]) // This multiline is a bit ugly... sorry
                                                                         next_state = EXEC_READ_READ; // We are reading from an open row in the same bank, nice! We can skip ACT and Precharging
                        else                                             next_state = EXEC_READ_PRECHARGE; // We are reading from a closed row in same bank :( got to close (precharge) the open one and then bank ACTivate  
@@ -265,13 +264,15 @@ module sdram_ctrl #(
     refresh_ack        <= '0;
     cmd                <= CMD_NOP;
     word_counter_rst_n <= '0;
+    refresh_en         <= 1'b1;
+    write_enable       <= 1'b0;
+    o_ready            <= 1'b0;
     {o_dram_ldqm, o_dram_udqm} <= 2'b11;
     unique case (next_state)
 
       INIT_RESET: begin
         clk_counter_rst_n          <= 1'b0;
         o_dram_addr                <= '0;
-        write_enable               <= 1'b0;
         refresh_en                 <= 1'b0;
         open_rows                  <= '{default: '0};
         {o_dram_ba_0, o_dram_ba_1} <= 2'b00;
@@ -280,7 +281,6 @@ module sdram_ctrl #(
       INIT_WAIT: begin
         clk_counter_rst_n           <= 1'b1;
         o_dram_addr                <= 'z;
-        write_enable               <= 1'b0;
         refresh_en                 <= 1'b0;
         {o_dram_ba_0, o_dram_ba_1} <= 'z;
       end
@@ -290,14 +290,12 @@ module sdram_ctrl #(
         cmd                        <= CMD_PRE_PALL;
         refresh_en                 <= 1'b0;
         o_dram_addr                <= {1'b0, 1'b1, 10'b0};
-        write_enable               <= 1'b0;
         {o_dram_ba_0, o_dram_ba_1} <= 2'b00;
       end
 
       INIT_WAIT_TRP: begin
         clk_counter_rst_n          <= 1'b1;
         o_dram_addr                <= 'z;
-        write_enable               <= 1'b0;
         refresh_en                 <= 1'b0;
         {o_dram_ba_0, o_dram_ba_1} <= 'z;
       end
@@ -306,7 +304,6 @@ module sdram_ctrl #(
         clk_counter_rst_n          <= 1'b0;
         cmd                        <= CMD_REF;
         o_dram_addr                <= '0;
-        write_enable               <= 1'b0;
         refresh_en                 <= 1'b0;
         {o_dram_ba_0, o_dram_ba_1} <= 2'b00;
       end
@@ -314,7 +311,6 @@ module sdram_ctrl #(
       INIT_WAIT_TARFC_1: begin
         clk_counter_rst_n          <= 1'b1;
         o_dram_addr                <= 'z;
-        write_enable               <= 1'b0;
         refresh_en                 <= 1'b0;
         {o_dram_ba_0, o_dram_ba_1} <= 'z;
       end
@@ -323,7 +319,6 @@ module sdram_ctrl #(
         clk_counter_rst_n          <= 1'b0;
         cmd                        <= CMD_REF;
         o_dram_addr                <= '0;
-        write_enable               <= 1'b0;
         refresh_en                 <= 1'b0;
         {o_dram_ba_0, o_dram_ba_1} <= 2'b00;
       end
@@ -331,7 +326,6 @@ module sdram_ctrl #(
       INIT_WAIT_TARFC_2: begin
         clk_counter_rst_n          <= 1'b1;
         o_dram_addr                <= 'z;
-        write_enable               <= 1'b0;
         refresh_en                 <= 1'b0;
         {o_dram_ba_0, o_dram_ba_1} <= 'z;
       end
@@ -342,7 +336,6 @@ module sdram_ctrl #(
         /* {A[11] <= 0, A[10] <= 0, A[9] <= WB, A[8] <= 0, A[7] <= 0, A[6:4] <= CAS Latency, A[3] <= Burst Type, A[2:0] <= Burst Length} */
         // WB = 1 if Single Location Access, WB = 0 if Programmed Burst Length
         o_dram_addr                <= {1'b0, 1'b0, 1'b0, 1'b0, 1'b0, CasLatency, 1'b0, BurstLengthBits}; 
-        write_enable               <= 1'b0;
         refresh_en                 <= 1'b0;
         {o_dram_ba_0, o_dram_ba_1} <= 2'b00;
         open_rows                  <= '{default: '0}; // Init open rows to all 0, no valid bit
@@ -351,7 +344,6 @@ module sdram_ctrl #(
       INIT_WAIT_TMRD: begin
         clk_counter_rst_n          <= 1'b1;
         o_dram_addr                <= 'z;
-        write_enable               <= 1'b0;
         refresh_en                 <= 1'b0;
         {o_dram_ba_0, o_dram_ba_1} <= 'z;
       end
@@ -359,9 +351,8 @@ module sdram_ctrl #(
       RDY_NOP: begin
         clk_counter_rst_n          <= 1'b0;
         o_dram_addr                <= 'z;
-        write_enable               <= 1'b0;
-        refresh_en                 <= 1'b1;
         {o_dram_ba_0, o_dram_ba_1} <= 'z;
+        o_ready                    <= 1'b1;
       end
 
       EXEC_REF: begin
@@ -369,16 +360,12 @@ module sdram_ctrl #(
         clk_counter_rst_n          <= 1'b0;
         cmd                        <= CMD_REF;
         o_dram_addr                <= '0;
-        write_enable               <= 1'b0;
-        refresh_en                 <= 1'b1;
         {o_dram_ba_0, o_dram_ba_1} <= 2'b00;
       end
 
       EXEC_WAIT_TARFC: begin
         clk_counter_rst_n          <= 1'b1;
         o_dram_addr                <= 'z;
-        write_enable               <= 1'b0;
-        refresh_en                 <= 1'b1;
         {o_dram_ba_0, o_dram_ba_1} <= 'z;
       end
 
@@ -387,8 +374,6 @@ module sdram_ctrl #(
         clk_counter_rst_n          <= 1'b0;
         cmd                        <= CMD_PRE_PALL;
         o_dram_addr                <= {1'bz, 1'b1, {10{1'bz}}}; // A[10] = 1 for all bank precharge
-        write_enable               <= 1'b0;
-        refresh_en                 <= 1'b1;
         {o_dram_ba_1, o_dram_ba_0} <= 2'b00;
       end
 
@@ -396,16 +381,12 @@ module sdram_ctrl #(
         clk_counter_rst_n         <= 1'b0;
         cmd                        <= CMD_ACT;
         o_dram_addr                <= wr_row; /* {A[0:11] <= Rows} */
-        write_enable               <= 1'b0;
-        refresh_en                 <= 1'b1;
         {o_dram_ba_1, o_dram_ba_0} <= wr_bank;
       end
 
       EXEC_WRITE_WAIT_TRCD: begin
         clk_counter_rst_n          <= 1'b1;
         o_dram_addr                <= 'z;
-        write_enable               <= 1'b0;
-        refresh_en                 <= 1'b1;
         {o_dram_ba_1, o_dram_ba_0} <= 'z;
       end
 
@@ -416,7 +397,6 @@ module sdram_ctrl #(
         /* {A[11] <= ?, A[10] <= Auto Precharge, A[9] <= Single Write, A[8] <= ?,  A[0:7] <= Cols} */
         o_dram_addr                <= {1'b0, AutoPrecharge, 1'b1, 1'b0, wr_col}; 
         write_enable               <= 1'b1;
-        refresh_en                 <= 1'b1;
         {o_dram_ba_1, o_dram_ba_0} <= wr_bank;
         {o_dram_ldqm, o_dram_udqm} <= 2'b00; /* Low so we can control the data buffer, DQM Write Latency is 0 cycles */
       end
@@ -426,7 +406,6 @@ module sdram_ctrl #(
         clk_counter_rst_n          <= 1'b0;
         o_dram_addr                <= 'z; 
         write_enable               <= 1'b1;
-        refresh_en                 <= 1'b1;
         {o_dram_ba_1, o_dram_ba_0} <= 'z;
         {o_dram_ldqm, o_dram_udqm} <= 2'b00; /* Low so we can control the data buffer, DQM Write Latency is 0 cycles */
       end
@@ -434,8 +413,6 @@ module sdram_ctrl #(
       EXEC_WRITE_WAIT_TRDL: begin
         clk_counter_rst_n          <= 1'b1;
         o_dram_addr                <= 'z;
-        write_enable               <= 1'b0;
-        refresh_en                 <= 1'b1;
         {o_dram_ba_1, o_dram_ba_0} <= 'z;
       end
 
@@ -443,8 +420,6 @@ module sdram_ctrl #(
         cmd                        <= CMD_PRE_PALL;
         clk_counter_rst_n          <= 1'b0;
         o_dram_addr                <= {1'bz, 1'b0, {10{1'bz}}}; // A[10] = 0 for single bank precharge
-        write_enable               <= 1'b0;
-        refresh_en                 <= 1'b1;
         {o_dram_ba_1, o_dram_ba_0} <= wr_bank;
       end
 
@@ -452,16 +427,12 @@ module sdram_ctrl #(
         cmd                        <= CMD_PRE_PALL;
         clk_counter_rst_n          <= 1'b0;
         o_dram_addr                <= {1'bz, 1'b0, {10{1'bz}}}; // A[10] = 0 for single bank precharge
-        write_enable               <= 1'b0;
-        refresh_en                 <= 1'b1;
         {o_dram_ba_1, o_dram_ba_0} <= rd_bank;
       end
      
       EXEC_READ_WAIT_TRP: begin
         clk_counter_rst_n          <= 1'b1;
         o_dram_addr                <= 'z;
-        write_enable               <= 1'b0;
-        refresh_en                 <= 1'b1;
         {o_dram_ba_1, o_dram_ba_0} <= 'z;
       end
 
@@ -469,19 +440,13 @@ module sdram_ctrl #(
         clk_counter_rst_n          <= 1'b0;
         cmd                        <= CMD_ACT;
         o_dram_addr                <= rd_row; /* {A[0:11] <= Rows} */
-        write_enable               <= 1'b0;
-        refresh_en                 <= 1'b1;
         {o_dram_ba_1, o_dram_ba_0} <= rd_bank;
-        {o_dram_ldqm, o_dram_udqm} <= 2'b11;
       end
 
       EXEC_READ_WAIT_TRCD: begin
         clk_counter_rst_n          <= 1'b1;
         o_dram_addr                <= 'z;
-        write_enable               <= 1'b0;
-        refresh_en                 <= 1'b1;
         {o_dram_ba_1, o_dram_ba_0} <= 'z;
-        {o_dram_ldqm, o_dram_udqm} <= 2'b11;
       end
 
       EXEC_READ_READ: begin
@@ -489,8 +454,6 @@ module sdram_ctrl #(
         cmd                        <= CMD_RD_RDA;
         /* {A[11] <= ?, A[10] <= Auto Precharge, A[9] <= Single Write, A[8] <= ?,  A[7:0] <= Cols} */
         o_dram_addr                <= {1'b0, AutoPrecharge, 1'b1, 1'b0, rd_col}; 
-        write_enable               <= 1'b0;
-        refresh_en                 <= 1'b1;
         {o_dram_ba_1, o_dram_ba_0} <= rd_bank;
         {o_dram_ldqm, o_dram_udqm} <= 2'b00; /* Low so the SDRAM controls the data buffer, DQM Read Latency is 2 cycles */
       end
@@ -498,8 +461,6 @@ module sdram_ctrl #(
       EXEC_READ_WAIT_CAS: begin
         clk_counter_rst_n          <= 1'b1;
         o_dram_addr                <= 'z;
-        write_enable               <= 1'b0;
-        refresh_en                 <= 1'b1;
         {o_dram_ba_1, o_dram_ba_0} <= 'z;
         {o_dram_ldqm, o_dram_udqm} <= 2'b00; /* Low so the SDRAM controls the data buffer, DQM Read Latency is 2 cycles */
       end
@@ -508,8 +469,6 @@ module sdram_ctrl #(
         word_counter_rst_n         <= 1'b1;
         clk_counter_rst_n          <= 1'b0;
         o_dram_addr                <= 'z;
-        write_enable               <= 1'b0;
-        refresh_en                 <= 1'b1;
         {o_dram_ba_1, o_dram_ba_0} <= 'z;
         open_rows[rd_bank]         <= {1'b1, rd_row}; // Latch the current row to the open row reg to keep track of what we can read again
         {o_dram_ldqm, o_dram_udqm} <= 2'b00; /* Low so the SDRAM controls the data buffer, DQM Read Latency is 2 cycles */
