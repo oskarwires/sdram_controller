@@ -128,12 +128,12 @@ module sdram_ctrl #(
     EXEC_REF,
     EXEC_WAIT_TARFC,
     EXEC_PRECHARGE_ALL,
+    EXEC_WRITE_PRECHARGE,
+    EXEC_WRITE_WAIT_TRP,
     EXEC_WRITE_ACT,
     EXEC_WRITE_WAIT_TRCD,
     EXEC_WRITE_WRITE,
     EXEC_WRITE_FINISH_WRITING,
-    EXEC_WRITE_WAIT_TRDL,
-    EXEC_WRITE_PRECHARGE,
     EXEC_READ_PRECHARGE,
     EXEC_READ_WAIT_TRP,
     EXEC_READ_ACT,
@@ -187,19 +187,24 @@ module sdram_ctrl #(
       INIT_WAIT_TARFC_2:    if (clk_counter == CyclesPerTarfc - 1)      next_state = INIT_MRS;    
                             else                                        next_state = INIT_WAIT_TARFC_2;         // @ loopback
             
-            
       INIT_MRS:                                                         next_state = INIT_WAIT_TMRD;
             
       INIT_WAIT_TMRD:       if (clk_counter == CyclesPerTmrd - 1)       next_state = RDY_NOP;
                             else                                        next_state = INIT_WAIT_TMRD;            // @ loopback
         
       RDY_NOP:     if (refresh_req)                                     next_state = EXEC_REF;
-                   else if (i_wr_req)                                   next_state = EXEC_WRITE_ACT;
+                   else if (i_wr_req)
+                     if (AutoPrecharge)                                 next_state = EXEC_WRITE_ACT;
+                     else // Here we handle if we should precharge and/or ACT for our write, as we are not autoprecharging
+                       if (!open_rows[wr_bank][RowWidth])               next_state = EXEC_WRITE_ACT;
+                       else if (wr_row == open_rows[wr_bank][RowWidth-1:0] && open_rows[wr_bank][RowWidth]) // This multiline is a bit ugly... sorry
+                                                                        next_state = EXEC_WRITE_WRITE;      // We are writing to an open row in the same bank, nice! We can skip ACT and Precharging
+                       else                                             next_state = EXEC_WRITE_PRECHARGE;  // We are writing to a closed row in same bank :( got to close (precharge) the open one and then bank ACTivate  
                    else if (i_rd_req)      
                      if (AutoPrecharge)                                 next_state = EXEC_READ_ACT;
                      else // Here we handle if we should precharge and/or ACT for our read, as we are not autoprecharging
-                       if (!open_rows[rd_bank][RowWidth])                next_state = EXEC_READ_ACT; // We haven't read from a row in this bank yet as valid bit isn't set. We can skip precharging and just bank ACTivate
-                       else if (rd_row == open_rows[rd_bank][RowWidth-1:0] && open_rows[rd_bank][RowWidth]) // This multiline is a bit ugly... sorry
+                       if (!open_rows[rd_bank][RowWidth])               next_state = EXEC_READ_ACT; // We haven't read from a row in this bank yet as valid bit isn't set. We can skip precharging and just bank ACTivate
+                       else if (rd_row == open_rows[rd_bank][RowWidth-1:0] && open_rows[rd_bank][RowWidth]) // This multiline is also a bit ugly... sorry
                                                                         next_state = EXEC_READ_READ; // We are reading from an open row in the same bank, nice! We can skip ACT and Precharging
                        else                                             next_state = EXEC_READ_PRECHARGE; // We are reading from a closed row in same bank :( got to close (precharge) the open one and then bank ACTivate  
                    else                                                 next_state = RDY_NOP;                   // @ loopback
@@ -211,26 +216,22 @@ module sdram_ctrl #(
                             else                                        next_state = EXEC_WAIT_TARFC;           // @ loopback
       
       EXEC_PRECHARGE_ALL:                                               next_state = RDY_NOP;
+
+      EXEC_WRITE_PRECHARGE:                                             next_state = EXEC_WRITE_WAIT_TRP;
+
+      EXEC_WRITE_WAIT_TRP:  if (clk_counter == CyclesPerTrp - 1)        next_state = EXEC_WRITE_ACT;
+                            else                                        next_state = EXEC_WRITE_WAIT_TRP;        // @ loopback
                 
       EXEC_WRITE_ACT:                                                   next_state = EXEC_WRITE_WAIT_TRCD;
               
       EXEC_WRITE_WAIT_TRCD: if (clk_counter == CyclesPerTrcd - 1)       next_state = EXEC_WRITE_WRITE;
                             else                                        next_state = EXEC_WRITE_WAIT_TRCD;      // @ loopback
                   
-      EXEC_WRITE_WRITE:     if (BurstLength == 1)          
-                              if (AutoPrecharge)                        next_state = RDY_NOP; 
-                              else                                      next_state = EXEC_WRITE_WAIT_TRDL;  // If we are not auto precharging, lets precharge manually!
+      EXEC_WRITE_WRITE:     if (BurstLength == 1)                       next_state = RDY_NOP; 
                             else                                        next_state = EXEC_WRITE_FINISH_WRITING; // If we are writing more than one word, then go to finish writing state
      
-      EXEC_WRITE_FINISH_WRITING: if (word_counter == BurstLength - 1)   // We have this state because we only want to have the write command for the first word, the rest of the words need NOP command
-                                   if (AutoPrecharge)                   next_state = RDY_NOP; 
-                                   else                                 next_state = EXEC_WRITE_WAIT_TRDL;  // If we are not auto precharging, lets precharge manually!
+      EXEC_WRITE_FINISH_WRITING: if (word_counter == BurstLength - 1)   next_state = RDY_NOP; // This state is for the part of the writing done (for remaining BurstLength - 1 bits) while asserting NOP
                                  else                                   next_state = EXEC_WRITE_FINISH_WRITING; // @ loopback
-         
-      EXEC_WRITE_WAIT_TRDL: if (clk_counter == CyclesPerTrdl - 1)       next_state = EXEC_WRITE_PRECHARGE; 
-                            else                                        next_state = EXEC_WRITE_WAIT_TRDL;      // @ loopback
-             
-      EXEC_WRITE_PRECHARGE:                                             next_state = RDY_NOP;
                   
       EXEC_READ_PRECHARGE:                                              next_state = EXEC_READ_WAIT_TRP;
             
@@ -254,9 +255,9 @@ module sdram_ctrl #(
   end
 
   /* 
-    If a read request is to a new row in the same bank, then the old row is closed. Otherwise, it's kept open
-    All these read rows left open are closed during an all bank precharged, which we do after every refresh cycle (4096 times every 64 ms or every ~15.6 us)
-    We close every row after a write
+    If a read / write request is to a new row in the same bank, then the old row is closed. Otherwise, it's kept open
+    All these read / write rows left open are closed during an all bank precharged, which we do after every refresh cycle (4096 times every 64 ms or every ~15.6 us).
+    This is done by an all bank precharge immediatelly after the refresh command
   */
 
   // FSM Output Controller
@@ -377,6 +378,19 @@ module sdram_ctrl #(
         {o_dram_ba_1, o_dram_ba_0} <= 2'b00;
       end
 
+      EXEC_WRITE_PRECHARGE: begin
+        cmd                        <= CMD_PRE_PALL;
+        clk_counter_rst_n          <= 1'b0;
+        o_dram_addr                <= {1'bz, 1'b0, {10{1'bz}}}; // A[10] = 0 for single bank precharge
+        {o_dram_ba_1, o_dram_ba_0} <= wr_bank;
+      end
+
+      EXEC_WRITE_WAIT_TRP: begin
+        clk_counter_rst_n          <= 1'b1;
+        o_dram_addr                <= 'z;
+        {o_dram_ba_1, o_dram_ba_0} <= 'z;
+      end
+
       EXEC_WRITE_ACT: begin
         clk_counter_rst_n         <= 1'b0;
         cmd                        <= CMD_ACT;
@@ -399,6 +413,7 @@ module sdram_ctrl #(
         write_enable               <= 1'b1;
         {o_dram_ba_1, o_dram_ba_0} <= wr_bank;
         {o_dram_ldqm, o_dram_udqm} <= 2'b00; /* Low so we can control the data buffer, DQM Write Latency is 0 cycles */
+        open_rows[wr_bank]         <= {1'b1, wr_row}; // Latch the current row to the open row reg to keep track of what we can read/write to again
       end
 
       EXEC_WRITE_FINISH_WRITING: begin // We finish writing the BurstLength - 1 bits left, while no command is asserted
@@ -408,19 +423,6 @@ module sdram_ctrl #(
         write_enable               <= 1'b1;
         {o_dram_ba_1, o_dram_ba_0} <= 'z;
         {o_dram_ldqm, o_dram_udqm} <= 2'b00; /* Low so we can control the data buffer, DQM Write Latency is 0 cycles */
-      end
-
-      EXEC_WRITE_WAIT_TRDL: begin
-        clk_counter_rst_n          <= 1'b1;
-        o_dram_addr                <= 'z;
-        {o_dram_ba_1, o_dram_ba_0} <= 'z;
-      end
-
-      EXEC_WRITE_PRECHARGE: begin
-        cmd                        <= CMD_PRE_PALL;
-        clk_counter_rst_n          <= 1'b0;
-        o_dram_addr                <= {1'bz, 1'b0, {10{1'bz}}}; // A[10] = 0 for single bank precharge
-        {o_dram_ba_1, o_dram_ba_0} <= wr_bank;
       end
 
       EXEC_READ_PRECHARGE: begin
@@ -470,7 +472,7 @@ module sdram_ctrl #(
         clk_counter_rst_n          <= 1'b0;
         o_dram_addr                <= 'z;
         {o_dram_ba_1, o_dram_ba_0} <= 'z;
-        open_rows[rd_bank]         <= {1'b1, rd_row}; // Latch the current row to the open row reg to keep track of what we can read again
+        open_rows[rd_bank]         <= {1'b1, rd_row}; // Latch the current row to the open row reg to keep track of what we can read/write to again
         {o_dram_ldqm, o_dram_udqm} <= 2'b00; /* Low so the SDRAM controls the data buffer, DQM Read Latency is 2 cycles */
       end
 

@@ -7,4 +7,5 @@ rtl/fpga_top_level.sv
 rtl/uart_rx.sv
 rtl/uart_tx.sv
 rtl/uart.sv
-test/fpga_top_level_tb.sv
+rtl/high_speed.sv
+test/high_speed_tb.sv
