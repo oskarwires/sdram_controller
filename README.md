@@ -1,5 +1,6 @@
 # sdram_controller
 SystemVerilog SDRAM Controller specifically for IS42S16400 (on the DE0 Dev Board) 
+
 Made for efficiency, done by keeping rows open during reads, and only precharging when neccesary. The controller intelligently keeps track of what rows are currently open in each bank.
 Adjustable burst length of 1, 2, 4, or 8 words.
 Adjustable CAS latency of 2 or 3 cycles.
