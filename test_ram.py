@@ -7,7 +7,7 @@ BurstLength = 4
 ser = serial.Serial('COM4', 115200, timeout=0.1)
 
 def write_ram(bank, col, row, value):
-    if bank < 0 or bank > 1 or col < 0 or col > 7 or row < 0 or row > 7:
+    if bank < 0 or bank > 3 or col < 0 or col > 7 or row < 0 or row > 7:
         raise ValueError("Invalid input values. Bank, col, and row must be within their respective ranges.")
     if value >= 255:
         raise ValueError("Can't send a value over 255 (8 bits)")
@@ -20,7 +20,7 @@ def write_ram(bank, col, row, value):
     print(f"Write: {value} to bank {bank} col {col} row {row} (addr: {addr})")
 
 def read_ram(bank, col, row, BurstLength):
-    if bank < 0 or bank > 1 or col < 0 or col > 7 or row < 0 or row > 7:
+    if bank < 0 or bank > 3 or col < 0 or col > 7 or row < 0 or row > 7:
         raise ValueError("Invalid input values. Bank, col, and row must be within their respective ranges.")
     addr = (bank << 6) | (col << 3) | row
     bytes_to_send = [ord('r'), addr]
@@ -42,22 +42,19 @@ def read_ram(bank, col, row, BurstLength):
     for value in responses:
             print(f"Read: {value} at bank {bank} col {col} row {row} (addr: {addr})")
 
-
-
-    
 ser.flushInput()
 ser.flushOutput()
-write_ram(0,0,1,143) # bank, col, row
-write_ram(1,0,2,102)
-write_ram(0,2,0,2)
-read_ram(0, 0, 1, BurstLength);
-read_ram(1, 0, 2, BurstLength);
-read_ram(0, 2, 0, BurstLength);
-time.sleep(1);
-read_ram(1, 0, 2, BurstLength);
-time.sleep(1);
-read_ram(0, 0, 1, BurstLength);
 
+write_ram(0, 0, 1, 143) # bank, col, row, value
+write_ram(1, 0, 2, 102)
+write_ram(0, 2, 0, 2)
+read_ram(0, 0, 1, BurstLength)
+read_ram(1, 0, 2, BurstLength)
+read_ram(0, 2, 0, BurstLength)
+time.sleep(1)
+read_ram(1, 0, 2, BurstLength)
+time.sleep(1)
+read_ram(0, 0, 1, BurstLength)
 
 # Close the serial port
 ser.close()

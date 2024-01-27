@@ -45,13 +45,13 @@ module fpga_top_level #(
   logic dram_clk;
 
   uart #(
-	  .BaudRate(115200),
-	  .SystemClockFreq(ClockFreq)
+    .BaudRate(115200),
+    .SystemClockFreq(ClockFreq)
   ) uart (
     .i_rst_n,
-	  .i_clk(dram_clk),
-	  .i_rx,
-	  .o_tx,
+    .i_clk(dram_clk),
+    .i_rx,
+    .o_tx,
     .i_tx_data(uart_tx_data),
     .o_rx_data(uart_rx_data),
     .o_rx_rdy(uart_rx_rdy),

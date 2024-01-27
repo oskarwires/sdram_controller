@@ -12,7 +12,7 @@ module sdram_ctrl_tb();
 
   logic i_sys_clk, i_dram_clk;
   logic i_rst_n;
-  logic i_wr_req, i_rd_req, o_rd_rdy;
+  logic i_wr_req, i_rd_req, o_rd_rdy, o_ready;
   
   logic [AddrWidth-1:0] i_wr_addr;
   logic [AddrWidth-1:0] i_rd_addr;
@@ -35,6 +35,7 @@ module sdram_ctrl_tb();
     .i_rd_addr,
     .o_rd_data,
     .o_rd_rdy,
+    .o_ready,
     .o_dram_addr(), 
     .io_dram_data(), 
     .o_dram_ba_0(), 
@@ -97,28 +98,28 @@ module sdram_ctrl_tb();
 
     #(201000); // Wait for init to finish
     write_sdram($random, {2'd0, 8'd5, 12'd13});
-    repeat (15) @(posedge i_dram_clk);
+    wait(o_ready);
     write_sdram($random, {2'd0, 8'd5, 12'd13});
-    repeat (100) @(posedge i_dram_clk);
+    repeat (25) @(posedge i_dram_clk);
 
     read_sdram({2'd0, 8'd5, 12'd13}, read_data); // Bank 0
-    repeat (15) @(posedge i_dram_clk);
+    wait(o_ready);
     read_sdram({2'd1, 8'd5, 12'd13}, read_data); // Bank 1, new bank, should be no precharge, just ACT
-    repeat (15) @(posedge i_dram_clk);
+    wait(o_ready);
     read_sdram({2'd0, 8'd9, 12'd13}, read_data); // Bank 0, same row, different col, should be NO precharge
-    repeat (15) @(posedge i_dram_clk);
+    wait(o_ready);
     read_sdram({2'd0, 8'd15, 12'd13}, read_data); // Bank 0, same row, different col, should be NO precharge
-    repeat (15) @(posedge i_dram_clk);
+    wait(o_ready);
     read_sdram({2'd0, 8'd15, 12'd15}, read_data); // Bank 0, different row, should be precharge and ACT
 
     repeat (2000) @(posedge i_dram_clk);
     // By now, there should've been a refresh. Let's make sure that a read to the previously open row does NOT skip a precharge
     read_sdram({2'd0, 8'd15, 12'd15}, read_data); // Bank 0, same row, should be ACT & precharge though, as it's been closed during our all bank precharge in refresh cycle
-    repeat (15) @(posedge i_dram_clk);
+    wait(o_ready);
     read_sdram({2'd0, 8'd35, 12'd20}, read_data); // Bank 0, different row, should be precharge
-    repeat (15) @(posedge i_dram_clk);
+    wait(o_ready);
     read_sdram({2'd0, 8'd1, 12'd20}, read_data); // Bank 0, different col, should be NO precharge
-    repeat (15) @(posedge i_dram_clk);
+    wait(o_ready);
     read_sdram({2'd0, 8'd1, 12'd21}, read_data); // Bank 0, different row, should be precharge
 
     repeat(50) @(posedge i_dram_clk);
